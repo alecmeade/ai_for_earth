@@ -6,7 +6,6 @@ from enum import Enum
 from typing import Iterable
 
 class Evolver(metaclass = ABCMeta):
-
     def __init__(self):
         self._child_heap = []
         heapify(self._child_heap)
@@ -31,11 +30,10 @@ class Evolver(metaclass = ABCMeta):
                                           self._parents[1][1]))   
 
     def update_parents(self):
-        new_parents = nlargest(self_num_parents, self._child_heap)
+        self._parents = nlargest(self_num_parents, self._child_heap)
         self._generation_priorities = []
 
     def summarize_generation(self):
-
         return {
             'generation': self.generation,
             'size': len(self._generation_priorities)
@@ -73,58 +71,71 @@ class VectorEvolver(Evolver):
         self.mutation_type = mutation_type
         super().__init__()
 
-    def init_child(self, vec_size = None):
-        if vec_size is None:
-            vec_size = self._vec_size
-
-        return np.random.randint(low=0, high=1, size=self.vec_size)
+    def init_child(self):
+        return np.random.randint(low=0, high=1, size=self._vec_size)
 
     def crossover(self, p1, p2):
         c = np.copy(p1)
 
         if self.crossover_type == UNIFORM:
-            crossover_bits = np.random.rand(self.size) < 0.5 
+            crossover_bits = np.random.rand(self._vec_size) < 0.5 
             c[crossover_bits] = p2[crossover_bits]
         
         return c
 
     def mutate(self, p):
         if self.mutation_type == FLIP_BIT:
-            mutation_bits = np.random.rand(self.size) < (1 / self.size)
+            mutation_bits = np.random.rand(self.size) < (1 / self._vec_size)
             p[mutation_bits] = 1 - p[mutation_bits]
 
         return p
 
 class MatrixEvolver(VectorEvolver):
+    def __init__(self, 
+                 sizes: Iterable[Iterable[int]],
+                 crossover_type: CrossoverType,
+                 mutation_type: MutationType):
+        self._matrix_sizes = sizes
+        self._matrix_params = [np.product(s) for s in self.sizes]
+        self._total_params = np.sum(self._matrix_params)
+        super().__init__(self._total_params, crossover_type, mutation_type)
 
-    def __init__(self, sizes: Iterable[Iterable[int]]):
-        self.sizes = sizes
-        self.mtrx_params = [np.product(s) for s in self.sizes]
-        self.total_params = np.sum(mask_params)
-        super()
+    def vec_to_matrices(self, vec):
+        matrices = []
+        idx = 0
+        for s in self._matrix_sizes:
+            m = np.zeros(s)
+            m[:] = vec[idx : idx + s]
+            matrices.append(m)
+            idx += s
 
-    def init_child(self):
-        super().init_child()
+        return matrices
 
-    def generate_matrices(self) -> Iterable[np.ndarray]:
-        return [np.zeros(s) for s in self.sizes()]
-
-    def matrices_to_vec(self, masks: Iterable[np.ndarray]) -> np.ndarray:
-        vec = np.zeros(self.params)
+    def matrices_to_vec(self, matrices):
+        vec = np.zeros(self._total_params)
         idx = 0
 
-        for i, s in enumerate(self.sizes):
-            params = self.mask_params[i]
-            vec[idx : params] = 
+        for i, s in enumerate(self._matrix_sizes):
+            vec[idx : idx + s] = matrices[i][:]
+            idx += s
 
-        assert idx == self.num_params
-        return
+        return vec
 
-    def vec_to_masks(self):
-        pass
+    def spawn_child(self):
+        return self.vec_to_matrices(super().spawn_child())
 
+    def add_child(self, child, priority):
+        return super().add_child(self.matrices_to_vec(child), priority)
 
-        
 
 if __name__ == "__main__":
-    pass
+    v = VectorEvolver(10, CrossoverType.UNIFORM, MutationType.FLIP_BIT)
+    v.summarize_generation()
+    
+    for j in range(0, 3):
+        for i in range(0, 10): 
+            c = v.spawn_child()
+            v.add_child(c, np.random.rand())
+        print(v.summarize_generation())
+        v.update_parents()
+
