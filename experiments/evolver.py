@@ -6,7 +6,10 @@ from enum import Enum
 from typing import Iterable
 
 class Evolver(metaclass = ABCMeta):
+    """"""
+
     def __init__(self):
+        """"""
         self._child_heap = []
         heapify(self._child_heap)
         self._num_parents = 2
@@ -15,6 +18,12 @@ class Evolver(metaclass = ABCMeta):
         self._generation_priorities = []
 
     def add_child(self, child, priority):
+        """
+        
+        Args:
+
+        """
+        
         entry = [priority, child]
         
         if len(self._child_heap) >= self._num_parents:
@@ -26,10 +35,18 @@ class Evolver(metaclass = ABCMeta):
         self._generation_priorities.append(priority)
         
     def spawn_child(self):
+        """
+        
+        Args:
+
+        Returns:
+
+        """
         return self.mutate(self.crossover(self._parents[0][1], 
                                           self._parents[1][1]))   
 
     def update_parents(self):
+        """"""
         self._parents = nlargest(self_num_parents, self._child_heap)
         self._generation_priorities = []
 
@@ -42,39 +59,70 @@ class Evolver(metaclass = ABCMeta):
 
     @abstractmethod
     def init_child(self):
+        """"""
         ...
 
     @abstractmethod
     def crossover(self, p1, p2):
+        """
+        
+        Args:
+
+        Returns:
+
+        """
         ...
 
     @abstractmethod
     def mutate(self, p):
+        """
+        
+        Args:
+
+        """
         ...
 
 
 class CrossoverType(Enum):
-    UNIFORM = 1
+    """"""
+    UNIFORM = 1 #
 
 class MutationType(Enum):
-    FLIP_BIT = 1
+    """"""
+    FLIP_BIT = 1 #
 
 
 class VectorEvolver(Evolver):
+    """"""
 
     def __init__(self, 
                  size: int, 
                  crossover_type: CrossoverType, 
                  mutation_type: MutationType):
+        """
+
+        Args:
+
+        """
         self._vec_size = size
         self.crossover_type = crossover_type
         self.mutation_type = mutation_type
         super().__init__()
 
     def init_child(self):
+        """"""
         return np.random.randint(low=0, high=1, size=self._vec_size)
 
     def crossover(self, p1, p2):
+        """
+        
+        Args:
+            p1:
+            p2:
+                
+        Returns:
+            
+        """
         c = np.copy(p1)
 
         if self.crossover_type == UNIFORM:
@@ -84,6 +132,13 @@ class VectorEvolver(Evolver):
         return c
 
     def mutate(self, p):
+        """
+        
+        Args:
+            p:
+        
+        """
+        
         if self.mutation_type == FLIP_BIT:
             mutation_bits = np.random.rand(self.size) < (1 / self._vec_size)
             p[mutation_bits] = 1 - p[mutation_bits]
@@ -91,16 +146,32 @@ class VectorEvolver(Evolver):
         return p
 
 class MatrixEvolver(VectorEvolver):
+    """"""
+    
     def __init__(self, 
                  sizes: Iterable[Iterable[int]],
                  crossover_type: CrossoverType,
                  mutation_type: MutationType):
+        """
+        Args:
+            sizes:
+            crossover_type:
+            mutation_type:
+        """
         self._matrix_sizes = sizes
         self._matrix_params = [np.product(s) for s in self.sizes]
         self._total_params = np.sum(self._matrix_params)
         super().__init__(self._total_params, crossover_type, mutation_type)
 
     def vec_to_matrices(self, vec):
+        """
+        
+        Args:
+            vec:
+                
+        Returns:
+            
+        """
         matrices = []
         idx = 0
         for s in self._matrix_sizes:
@@ -112,6 +183,15 @@ class MatrixEvolver(VectorEvolver):
         return matrices
 
     def matrices_to_vec(self, matrices):
+        """
+        
+        Args:
+            matrices: 
+                
+        Returns:
+            
+        """
+
         vec = np.zeros(self._total_params)
         idx = 0
 
@@ -122,9 +202,11 @@ class MatrixEvolver(VectorEvolver):
         return vec
 
     def spawn_child(self):
+        """"""
         return self.vec_to_matrices(super().spawn_child())
 
     def add_child(self, child, priority):
+        """"""
         return super().add_child(self.matrices_to_vec(child), priority)
 
 
