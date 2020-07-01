@@ -169,7 +169,7 @@ class MatrixEvolver(VectorEvolver):
             mutation_type:
         """
         self._matrix_sizes = sizes
-        self._matrix_params = [np.product(s) for s in self.sizes]
+        self._matrix_params = [np.product(s) for s in self._matrix_sizes]
         self._total_params = np.sum(self._matrix_params)
         super().__init__(self._total_params, crossover_type, mutation_type)
 
@@ -184,7 +184,7 @@ class MatrixEvolver(VectorEvolver):
         """
         matrices = []
         idx = 0
-        for s in self._matrix_sizes:
+        for s in self._matrix_params:
             m = np.zeros(s)
             m[:] = vec[idx : idx + s]
             matrices.append(m)
@@ -205,7 +205,7 @@ class MatrixEvolver(VectorEvolver):
         vec = np.zeros(self._total_params)
         idx = 0
 
-        for i, s in enumerate(self._matrix_sizes):
+        for i, s in enumerate(self._matrix_params):
             vec[idx : idx + s] = matrices[i][:]
             idx += s
 
@@ -218,29 +218,3 @@ class MatrixEvolver(VectorEvolver):
     def add_child(self, child, priority):
         """"""
         return super().add_child(self.matrices_to_vec(child), priority)
-
-import matplotlib.pyplot as plt
-import matplotlib
-if __name__ == "__main__":
-    s = 100
-    v = VectorEvolver(s, CrossoverType.UNIFORM, MutationType.FLIP_BIT)
-    true_vector = np.ones(s)
-    avgs=[]
-    b = False
-    for j in range(0, 1000000000):
-        for i in range(0, 10): 
-            c = v.spawn_child()
-            loss = np.sum(np.abs(c - true_vector))
-            if loss == 0:
-                b = True
-                break
-
-            v.add_child(c, 1.0 / (loss))
-        if b:
-            break
-        gen_stats = v.summarize_generation()
-        avgs.append(gen_stats["mean"])
-        v.update_parents()
-    f = plt.figure()
-    plt.plot(avgs)
-    f.savefig('test.png') 
