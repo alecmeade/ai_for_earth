@@ -1,19 +1,21 @@
 import heapq
 import numpy as np
+import uuid
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from enum import Enum
 from typing import Iterable
 
 class Evolver(metaclass = ABCMeta):
-    """"""
+    """An abstract class for evolving an object using a genetic algorithm."""
 
     def __init__(self):
-        """"""
+        
         self._child_heap = []
-        heapify(self._child_heap)
+        self._child_dict = {}
+        heapq.heapify(self._child_heap)
         self._num_parents = 2
-        self._parents = [[0, self.init_child()] for i in range(self._num_parents)]
+        self._parents = [self.init_child() for i in range(self._num_parents)]
         self._generation = 0    
         self._generation_priorities = []
 
@@ -23,14 +25,15 @@ class Evolver(metaclass = ABCMeta):
         Args:
 
         """
-        
-        entry = [priority, child]
+        cid = uuid.uuid1()
+        self._child_dict[cid] = child
+        entry = [priority, cid]
         
         if len(self._child_heap) >= self._num_parents:
-            heapreaplce(self._child_heap, entry)
+            heapq.heapreplace(self._child_heap, entry)
 
         else:
-            heappush(self._child_heap, entry)
+            heapq.heappush(self._child_heap, entry)
         
         self._generation_priorities.append(priority)
         
@@ -42,20 +45,27 @@ class Evolver(metaclass = ABCMeta):
         Returns:
 
         """
-        return self.mutate(self.crossover(self._parents[0][1], 
-                                          self._parents[1][1]))   
+        return self.mutate(self.crossover(self._parents[0], 
+                                          self._parents[1]))   
 
     def update_parents(self):
         """"""
-        self._parents = nlargest(self_num_parents, self._child_heap)
+        parents_cid = heapq.nlargest(self._num_parents, self._child_heap)
+        self._parents = []
+        for priority, pcid in parents_cid:
+            self._parents.append(self._child_dict[pcid])
+        
+        self._child_dict = {}
+        self._child_heap = []
+        heapq.heapify(self._child_heap)
         self._generation_priorities = []
+        self._generation += 1
 
     def summarize_generation(self):
         return {
-            'generation': self.generation,
-            'size': len(self._generation_priorities)
-            'mean': np.mean(self._generation_priorities),
-            'std': np.std(self._generation_priorities)}
+            'generation': self._generation,
+            'mean': round(np.mean(self._generation_priorities), 2),
+            'std': round(np.std(self._generation_priorities), 2)}
 
     @abstractmethod
     def init_child(self):
@@ -125,7 +135,7 @@ class VectorEvolver(Evolver):
         """
         c = np.copy(p1)
 
-        if self.crossover_type == UNIFORM:
+        if self.crossover_type == CrossoverType.UNIFORM:
             crossover_bits = np.random.rand(self._vec_size) < 0.5 
             c[crossover_bits] = p2[crossover_bits]
         
@@ -139,8 +149,8 @@ class VectorEvolver(Evolver):
         
         """
         
-        if self.mutation_type == FLIP_BIT:
-            mutation_bits = np.random.rand(self.size) < (1 / self._vec_size)
+        if self.mutation_type == MutationType.FLIP_BIT:
+            mutation_bits = np.random.rand(self._vec_size) < (1 / self._vec_size)
             p[mutation_bits] = 1 - p[mutation_bits]
 
         return p
@@ -209,15 +219,28 @@ class MatrixEvolver(VectorEvolver):
         """"""
         return super().add_child(self.matrices_to_vec(child), priority)
 
-
+import matplotlib.pyplot as plt
+import matplotlib
 if __name__ == "__main__":
-    v = VectorEvolver(10, CrossoverType.UNIFORM, MutationType.FLIP_BIT)
-    v.summarize_generation()
-    
-    for j in range(0, 3):
+    s = 100
+    v = VectorEvolver(s, CrossoverType.UNIFORM, MutationType.FLIP_BIT)
+    true_vector = np.ones(s)
+    avgs=[]
+    b = False
+    for j in range(0, 1000000000):
         for i in range(0, 10): 
             c = v.spawn_child()
-            v.add_child(c, np.random.rand())
-        print(v.summarize_generation())
-        v.update_parents()
+            loss = np.sum(np.abs(c - true_vector))
+            if loss == 0:
+                b = True
+                break
 
+            v.add_child(c, 1.0 / (loss))
+        if b:
+            break
+        gen_stats = v.summarize_generation()
+        avgs.append(gen_stats["mean"])
+        v.update_parents()
+    f = plt.figure()
+    plt.plot(avgs)
+    f.savefig('test.png') 
