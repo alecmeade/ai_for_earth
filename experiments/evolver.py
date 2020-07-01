@@ -4,7 +4,7 @@ import uuid
 
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from typing import Any, Dict, Iterable
+from typing import Dict, Iterable
 
 
 class Evolver(metaclass = ABCMeta):
@@ -28,10 +28,8 @@ class Evolver(metaclass = ABCMeta):
         self._parents = [self.init_child() for i in range(self._num_parents)]
 
     
-    # TODO(ameade) create a child class to eliminate the need for typing.Any
-    # and to allow for functions making it easier to convert children to a usable
-    # format.
-    def add_child(self, child: Any, priority: float) -> uuid.UUID:
+    # TODO(ameade) create a child class to allow typing enforcement.
+    def add_child(self, child, priority: float) -> uuid.UUID:
         """Adds a child to the current generation with a given priority.
         
         Args:
