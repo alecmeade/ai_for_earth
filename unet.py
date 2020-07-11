@@ -35,7 +35,7 @@ class UNet(nn.Module):
         for i in range(depth):
             # Create contraction layers that reduce the input channels by the provided
             # scale factor.
-            out_channels = prev_layer_channels * channel_scale_factor
+            out_channels = prev_layer_channels * scale_factor
             self.down_layers.append(DownLayer(prev_layer_channels,
                                               out_channels, 
                                               scale_factor = scale_factor))
@@ -44,15 +44,15 @@ class UNet(nn.Module):
         for i in range(depth):
             # Create contraction layers that increase the input channels by the provided
             # scale factor.
-            out_channels = prev_layer_channels / channel_scale_factor
-            self.up_layers.append(UpLayer(prev_layer_channels
+            out_channels = int(prev_layer_channels / scale_factor)
+            self.up_layers.append(UpLayer(prev_layer_channels,
                                           out_channels, 
                                           scale_factor = scale_factor))
             prev_layer_channels = out_channels
 
         # Final layer in the network performing a 1x1 convolution to match the number of
         # output classes.
-        self.conv1d = nn.Conv2d(prev_channels, n_classes, kernel_size=1)
+        self.conv1d = nn.Conv2d(prev_layer_channels, n_classes, kernel_size=1)
         
     def forward(self, x):
         """Forward pass for the UNet performing both contraction, contraction and skip connections."""
@@ -106,9 +106,9 @@ class DoubleConvBlock(nn.Module):
         
         # Create two convolutional layers with the first performing the necessary
         # reduction in channels.
-        addConvLayer(input_channels, out_channels)
+        addConvLayer(in_channels, out_channels)
         addConvLayer(out_channels, out_channels)
-        self.conv_layers = nn.Sequential(*layers)
+        self.conv_layers = nn.Sequential(*self.conv_layers)
             
     def forward(self, x):
         """Forward pass for the double convolution layer."""
@@ -191,7 +191,7 @@ class UpLayer(nn.Module):
                  has_batch_norm: bool = True,
                  scale_factor: int = 2,
                  stride: int = 2,
-                 up_conv_mode: UpConvMode):
+                 up_conv_mode: UpConvMode = UpConvMode.CONV_TRANSPOSE):
         super().__init__()
         up_layers = []
     
@@ -208,7 +208,7 @@ class UpLayer(nn.Module):
             # Only UpConvMode.CONV_TRANSPOSE and UpConvMode.UPSAMPLE are supported.
             raise InvalidUpConvModeError
         
-        self.up_layers = nn.Sequential(*layers)
+        self.up_layers = nn.Sequential(*up_layers)
         
         # Create a convolution layer that will take as input the output of the `self.up_layers`
         # and the output from a skip level connection to the contraction side of the UNet.

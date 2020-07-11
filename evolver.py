@@ -17,7 +17,7 @@ class MutationType(Enum):
 class VectorEvolver():
     """An abstract class for evolving an object using a genetic algorithm."""
 
-     def __init__(self, 
+    def __init__(self, 
                  size: int, 
                  crossover_type: CrossoverType, 
                  mutation_type: MutationType):
@@ -82,7 +82,7 @@ class VectorEvolver():
         return cid
 
 
-    def spawn_child(self) -> Any:
+    def spawn_child(self):
         """Creates a new child by applying mutations and crossovers to parents.
 
         Returns: 
