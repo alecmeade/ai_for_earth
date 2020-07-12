@@ -32,42 +32,52 @@ class UNet(nn.Module):
         self.up_layers = nn.ModuleList()
 
         prev_layer_channels = in_channels
+        out_channels = start_channels
+        self.start_layer = DoubleConvBlock(prev_layer_channels, out_channels,
+                kernel_size = 3, padding = 1, has_relu = True, has_batch_norm = True)
+    
         for i in range(depth):
-            # Create contraction layers that reduce the input channels by the provided
+            # Create contraction layers that increase the input channels by the provided
             # scale factor.
+            prev_layer_channels = out_channels
             out_channels = prev_layer_channels * scale_factor
             self.down_layers.append(DownLayer(prev_layer_channels,
                                               out_channels, 
                                               scale_factor = scale_factor))
-            prev_layer_channels = out_channels
-
+        
+         
         for i in range(depth):
-            # Create contraction layers that increase the input channels by the provided
+            # Create contraction layers that reduce the input channels by the provided
             # scale factor.
+            prev_layer_channels = out_channels
             out_channels = int(prev_layer_channels / scale_factor)
             self.up_layers.append(UpLayer(prev_layer_channels,
                                           out_channels, 
                                           scale_factor = scale_factor))
-            prev_layer_channels = out_channels
 
         # Final layer in the network performing a 1x1 convolution to match the number of
         # output classes.
+        prev_layer_channels = out_channels
+        out_channels = int(prev_layer_channels / scale_factor)
         self.conv1d = nn.Conv2d(prev_layer_channels, n_classes, kernel_size=1)
         
     def forward(self, x):
         """Forward pass for the UNet performing both contraction, contraction and skip connections."""
         out = x 
         down_outs = []
+        out = self.start_layer(x)
+        down_outs.append(out)
+
         # Pass input through contraction layers and store the output for use with skip connections.
         for down in self.down_layers:
             out = down(out)
             down_outs.append(out)
-        
+    
         # Pass input through the expansion layers and add in the corresponding contraction layer output.
         for i, up in enumerate(self.up_layers):
-            down_out = down_outs[i]
+            down_out = down_outs[-(i + 2)]
             out = up(out, down_out)
-        
+
         return self.conv1d(out)
 
         
@@ -97,7 +107,7 @@ class DoubleConvBlock(nn.Module):
         
         def addConvLayer(in_c, out_c):
             """Creates a single convolutional layer."""
-            self.conv_layers.append(nn.Conv2d(in_c, out_c, kernel_size))
+            self.conv_layers.append(nn.Conv2d(in_c, out_c, kernel_size, padding=padding))
             if has_relu:
                 self.conv_layers.append(nn.ReLU())
 
@@ -138,13 +148,13 @@ class DownLayer(nn.Module):
                  scale_factor: int = 2):
         super().__init__()
         self.layers = nn.Sequential(
+            nn.MaxPool2d(scale_factor),
             DoubleConvBlock(in_channels, 
                             out_channels, 
                             kernel_size,
                             padding,
                             has_relu, 
-                            has_batch_norm),
-            nn.MaxPool2d(scale_factor))
+                            has_batch_norm))
 
     def forward(self, x):
         """Forward pass for the Downlayer."""
@@ -197,7 +207,7 @@ class UpLayer(nn.Module):
     
         if up_conv_mode == UpConvMode.CONV_TRANSPOSE:
             # Use deconvolution to increase the features in the UNet.
-            up_layers.append(nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride))
+            up_layers.append(nn.ConvTranspose2d(in_channels, out_channels, scale_factor, stride))
                           
         elif up_conv_mode == UpConvMode.UPSAMPLE:
             # Use upsampling followed by convolution to increase the features in the UNet.
@@ -228,10 +238,11 @@ class UpLayer(nn.Module):
         # added by strided convolutions.
         h_up, w_up = up_out.size()[2:]
         h_down, w_down = down_x.size()[2:]
-        diff_h = (h_down - h_up) / 2.0
-        diff_w = (w_down - w_up) / 2.0
+        diff_h = int((h_down - h_up) / 2)
+        diff_w = int((w_down - w_up) / 2)
         crop_out = down_x[:, :, diff_h:(diff_h + h_up), diff_w:(diff_w + w_up)]
-        
         # Concat the output of the expansion and contraction layers.
-        concat_out = torch.cat([up_out, crop_out])
+        concat_out = torch.cat([crop_out, up_out], dim = 1)
+
+
         return self.conv_layers(concat_out)
