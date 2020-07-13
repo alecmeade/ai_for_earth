@@ -15,18 +15,20 @@ class MutationType(Enum):
 
 
 class VectorEvolver():
-    """An abstract class for evolving an object using a genetic algorithm."""
+    """A class for evolving a vector using a genetic algorithm."""
 
     def __init__(self, 
                  size: int, 
                  crossover_type: CrossoverType, 
                  mutation_type: MutationType):
-        """
+        """Vector Evolver Ctor.
 
         Args:
-            size:
-            crossover_type:
-            mutation_type:
+            size: The size of the vector to evolve.
+            crossover_type: The type of crossover operation used to produce new
+                offspring.
+            mutation_type: The type of mutation operation used to produce new
+                offspring.
         """
         self._vec_size = size
         self.crossover_type = crossover_type
@@ -124,19 +126,28 @@ class VectorEvolver():
             'std': round(np.std(self._generation_priorities), 2)}
 
     def init_child(self):
-        """"""
+        """Intializes a random new child vector.
+        
+        Returns:
+            An np.ndarray.
+            
+        """
         return np.random.randint(low=0, high=1, size=self._vec_size)
 
     def crossover(self, p1, p2):
-        """
+        """Performs a crossover operation combining two parents to produce
+            a new child.
         
         Args:
-            p1:
-            p2:
+            p1: The first parent vector to crossover.
+            p2: The second parent vector to crossover.
                 
         Returns:
-            
+            A new child vector containing a random combination of the two
+            parents.
+
         """
+
         c = np.copy(p1)
 
         if self.crossover_type == CrossoverType.UNIFORM:
@@ -146,11 +157,13 @@ class VectorEvolver():
         return c
 
     def mutate(self, p):
-        """
+        """Mutates a vector to alter it from its original state.
         
         Args:
-            p:
+            p: The vector to mutate.
         
+        Returns:
+            The newly altered vector.
         """
         
         if self.mutation_type == MutationType.FLIP_BIT:
@@ -161,17 +174,20 @@ class VectorEvolver():
 
 
 class MatrixEvolver(VectorEvolver):
-    """"""
+    """A class to evolve matrices using genetic algorithims."""
     
     def __init__(self, 
                  sizes: Iterable[Iterable[int]],
                  crossover_type: CrossoverType,
                  mutation_type: MutationType):
-        """
+       """Matrix Evolver Ctor.
+
         Args:
-            sizes:
-            crossover_type:
-            mutation_type:
+            sizes: An iterable containing the sizes of the matrices to evolve.
+            crossover_type: The type of crossover operation used to produce new
+                offspring.
+            mutation_type: The type of mutation operation used to produce new
+                offspring.
         """
         self._matrix_sizes = sizes
         self._matrix_params = [np.product(s) for s in self._matrix_sizes]
@@ -179,14 +195,16 @@ class MatrixEvolver(VectorEvolver):
         super().__init__(self._total_params, crossover_type, mutation_type)
 
     def vec_to_matrices(self, vec):
-        """
+        """ Converts a vector to matrices whose size is defined by self.sizes.
         
         Args:
-            vec:
+            vec: The vector to convert to matrices.
                 
         Returns:
-            
+            The set of matrices reshaped from vec.
+
         """
+
         matrices = []
         idx = 0
         for s in self._matrix_params:
@@ -198,13 +216,13 @@ class MatrixEvolver(VectorEvolver):
         return matrices
 
     def matrices_to_vec(self, matrices):
-        """
+        """Converts an iterable of matrices to a vector by reshaping them.
         
         Args:
-            matrices: 
+            matrices: The matrices to flatten and concat to a single vector.
                 
         Returns:
-            
+            The newly created vector from matrices.
         """
 
         vec = np.zeros(self._total_params)
@@ -217,9 +235,25 @@ class MatrixEvolver(VectorEvolver):
         return vec
 
     def spawn_child(self):
-        """"""
+        """Creates a new set of child matrices by first spawning a vector and
+        converting to matrix form.
+        
+        Returns:
+            A new randomly generated set of child matrices.
+            
+        """
+
         return self.vec_to_matrices(super().spawn_child())
 
     def add_child(self, child, priority):
-        """"""
+        """Appends a matrix to the set of tracked children with the provided
+        priority. This is used to determine which children survive and produce
+        offspring in each generation.
+        
+        Returns:
+            A pointer to the entry containing the matrices and corresponding
+            priority.
+            
+        """
+
         return super().add_child(self.matrices_to_vec(child), priority)
