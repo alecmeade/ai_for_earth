@@ -180,7 +180,7 @@ class MatrixEvolver(VectorEvolver):
                  sizes: Iterable[Iterable[int]],
                  crossover_type: CrossoverType,
                  mutation_type: MutationType):
-       """Matrix Evolver Ctor.
+        """Matrix Evolver Ctor.
 
         Args:
             sizes: An iterable containing the sizes of the matrices to evolve.
@@ -189,6 +189,7 @@ class MatrixEvolver(VectorEvolver):
             mutation_type: The type of mutation operation used to produce new
                 offspring.
         """
+        
         self._matrix_sizes = sizes
         self._matrix_params = [np.product(s) for s in self._matrix_sizes]
         self._total_params = np.sum(self._matrix_params)

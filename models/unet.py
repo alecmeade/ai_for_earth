@@ -25,7 +25,8 @@ class UNet(nn.Module):
                  n_classes: int, 
                  depth: int, 
                  start_channels: int = 64, 
-                 scale_factor: int = 2):
+                 scale_factor: int = 2,
+                 ):
         super().__init__()
         # Stores the contraction and expansion layers in the UNet.
         self.down_layers = nn.ModuleList()
