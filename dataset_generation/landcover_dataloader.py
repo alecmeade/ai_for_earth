@@ -10,8 +10,7 @@ from typing import Any, Dict
 class LandCoverDataset(torch.utils.data.Dataset):
     """Land Cover Dataset Containing patches. Loads a given tile into memory and slices it upon request."""
 
-    def __init__(self, features_path, labels_path, patch_size, n_samples, 
-                 patch_coordinates = None, exclude_coordinates = None):
+    def __init__(self, dataset_config_path):
         """
         Args:
             features_path: Path to the features of a tile.
@@ -87,7 +86,7 @@ class DatasetType(Enum):
 def get_landcover_dataloader(data_config_dir: str,
                              dataset_type: DatasetType, 
                              dataloader_params: Dict[str, Any]) -> torch.utils.data.DataLoader:
-    """Gets a pytorch DataLoader for landcover data..
+    """Gets a pytorch DataLoader for landcover data.
 
     Args:
         data_config_dir: The path to the directory containing configs
@@ -103,7 +102,7 @@ def get_landcover_dataloader(data_config_dir: str,
     config_name = None
     if dataset_type == DatasetType.TRAIN:
         config_name = "train.csv"
-
+        
     elif dataset_type == DatasetType.VALIDATION
         config_name = "validation.csv"
 
@@ -119,6 +118,7 @@ def get_landcover_dataloader(data_config_dir: str,
     config_path = os.path.join(data_config_dir, config_name)
     dataset = LandCoverDataset(config_path) 
     return torch.utils.data.DataLoader(dataset, **dataloader_params)
+
 
 def sample_image_patch_coordinates(data_size, patch_size, n_samples):
     """Samples image coordinates to create patches from the image..
