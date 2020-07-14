@@ -3,6 +3,9 @@ import os
 import torch
 import torch.nn as nn
 
+from enum import Enum
+from typing import Any, Dict
+
 
 class LandCoverDataset(torch.utils.data.Dataset):
     """Land Cover Dataset Containing patches. Loads a given tile into memory and slices it upon request."""
@@ -67,33 +70,58 @@ class LandCoverDataset(torch.utils.data.Dataset):
         label = torch.from_numpy(self.labels[0, y : y + height, x : x + width]).type(torch.LongTensor)
         return img, label
 
-def read_tif_to_np(tif_path):
-    """Reads a tif file and converts it into a numpy.ndarray.
-    
-    Arg:
-        tif_path: The full path to the tif file to read.
-    
-    Returns:
-        A numpy.ndarray containing the tif file data. The returned tif has a rolled
-        dimension and so the input is in the shape (channels, height width).
-    
-    """
-    with rasterio.open(tif_path) as f:
-        return f.read()
 
-def apply_remap_values(labels, label_map):
-    """Reassigns values inplace in an numpy array given a provided mapping.
+class InvalidDatasetTypeError(Error):
+    "Error raised when an invalid dataset is provided to a function."""
+    pass
+
+
+class DatasetType(Enum):
+    """Defines possible dataset types."""
+    TRAIN = 1
+    VALIDATION = 2
+    FINETUNING = 3
+    TEST = 4
     
+
+def get_landcover_dataloader(data_config_dir: str,
+                             dataset_type: DatasetType, 
+                             dataloader_params: Dict[str, Any]) -> torch.utils.data.DataLoader:
+    """Gets a pytorch DataLoader for landcover data..
+
     Args:
-        labels: An ndarray of labels.
-        label_map: A dict[int, int] mapping label classes [original, new].
-        
-    """
-    for l1, l2 in label_map.items():
-        labels[labels == l1] = l2
+        data_config_dir: The path to the directory containing configs
+            specifying which tiles to load.
+        dataset_type: An enum specifying which data partition to recieve. I.E.
+            TRAIN, VALIDATION, TEST, etc...
+        dataloader_params: A set of params to pass to the DataLoader.
 
-def sample_patch_coordinates(data_size, patch_size, n_samples):
-    """Generates image patches from a tile containing features and corresponding labels.
+    Returns:
+        A pytorch DataLoader corresponding to the provided inputs.
+    """
+    
+    config_name = None
+    if dataset_type == DatasetType.TRAIN:
+        config_name = "train.csv"
+
+    elif dataset_type == DatasetType.VALIDATION
+        config_name = "validation.csv"
+
+    elif dataset_type == DatasetType.FINETUNING:
+        config_name = "finetuning.csv"
+
+    elif dataset_type == DatasetType.TEST:
+        config_name = "test.csv"
+
+    else:
+        raise InvalidDataSetTypeError()
+
+    config_path = os.path.join(data_config_dir, config_name)
+    dataset = LandCoverDataset(config_path) 
+    return torch.utils.data.DataLoader(dataset, **dataloader_params)
+
+def sample_image_patch_coordinates(data_size, patch_size, n_samples):
+    """Samples image coordinates to create patches from the image..
 
     Args:
         data_size: The size of the data image patch.
@@ -109,5 +137,4 @@ def sample_patch_coordinates(data_size, patch_size, n_samples):
     xs = np.random.randint(0, data_size[2] - width, n_samples)
     ys = np.random.randint(0, data_size[1] - height, n_samples)
     return np.dstack((xs, ys)).reshape((n_samples, 2))
-    
-
+ 
