@@ -1,3 +1,4 @@
+import csv
 import numpy as np
 import os
 import torch
@@ -5,6 +6,12 @@ import torch.nn as nn
 
 from enum import Enum
 from typing import Any, Dict
+
+# Names to use for saving and reading data partitions.
+DATASET_TRAIN_NAME = "train"
+DATASET_VALIDATION_NAME = "validation"
+DATASET_FINETUNING_NAME = "finetuning"
+DATASET_TEST_NAME = "test"
 
 
 class LandCoverDataset(torch.utils.data.Dataset):
@@ -81,16 +88,16 @@ class DatasetType(Enum):
     VALIDATION = 2
     FINETUNING = 3
     TEST = 4
-    
 
-def get_landcover_dataloader(data_config_dir: str,
+
+def get_landcover_dataloader(data_dir: str,
                              dataset_type: DatasetType, 
                              dataloader_params: Dict[str, Any]) -> torch.utils.data.DataLoader:
     """Gets a pytorch DataLoader for landcover data.
 
     Args:
-        data_config_dir: The path to the directory containing configs
-            specifying which tiles to load.
+        data_dir: The path to the directory containing files with coordinates
+            within tiles.
         dataset_type: An enum specifying which data partition to recieve. I.E.
             TRAIN, VALIDATION, TEST, etc...
         dataloader_params: A set of params to pass to the DataLoader.
@@ -99,25 +106,72 @@ def get_landcover_dataloader(data_config_dir: str,
         A pytorch DataLoader corresponding to the provided inputs.
     """
     
-    config_name = None
+    dataset_file = None
     if dataset_type == DatasetType.TRAIN:
-        config_name = "train.csv"
+        dataset_file = "%s.csv" $ DATASET_TRAIN_NAME
         
     elif dataset_type == DatasetType.VALIDATION
-        config_name = "validation.csv"
+        dataset_file = "%s.csv" % DATASET_VALIDATION_NAME
 
     elif dataset_type == DatasetType.FINETUNING:
-        config_name = "finetuning.csv"
+        dataset_file = "%s.csv" % DATASET_FINETUNING_NAME
 
     elif dataset_type == DatasetType.TEST:
-        config_name = "test.csv"
+        dataset_file = "%s.csv" % DATASET_TEST_NAME
 
     else:
         raise InvalidDataSetTypeError()
 
-    config_path = os.path.join(data_config_dir, config_name)
-    dataset = LandCoverDataset(config_path) 
+    data_path = os.path.join(data_dir, dataset_file)
+    dataset = LandCoverDataset(data_path) 
     return torch.utils.data.DataLoader(dataset, **dataloader_params)
+
+
+def create_landcover_datasets(dataset_config_path: str, data_dir: str):
+    """Generates datasets based on a config file.
+
+    Args:
+        dataset_config_dir: The path to the directory containing configs
+            specifying which tiles to load.
+        data_dir: A director to write the data to.
+    """
+
+    tile_counts = {}
+    tile_map = {}
+    partition_map = {}
+    with open(dataset_config_path, "r") as f:
+        # TODO(ameade): Update config files to use protos instead of CSVs.
+        config_csv_reader = csv.reader(f, delimiter = ",")
+    
+        # Dictionary storing tile names and the corresponding row entries from
+        # the csv.
+        for row in config_csv_reader:
+            parition_type = row[0]
+            n_samples = int(row[1])
+            tile_name = row[2]
+            feature_path = row[3]
+            label_path = row[4]
+
+            if partition_type not in partition_map:
+                partition_map[partition_type] = []
+
+            if tile_name not in tile_map:
+                tile_map[tile_name] = []
+                tile_counts[tile_name] = 0
+
+            tile_map[tile_name].append([partition_type, n_samples,
+                feature_path, label_path])
+
+            tile_counts[tile_name] += n_samples
+
+    for tile, dataset_entries in tile_map.items():
+        total_samples = tile_counts[tile]
+
+        # copy label and feature tiles to dir
+    
+        # sample points from tile and append to partition_map
+
+        # append points to file
 
 
 def sample_image_patch_coordinates(data_size, patch_size, n_samples):
