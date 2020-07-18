@@ -1,55 +1,55 @@
 import numpy as np
 import os 
 import rasterio
-import shutil
 
-from enum import Enum
 from typing import Dict
 
 # Names to use for saving and reading data partitions.
-PARTITION_TRAIN_NAME = "train"
-PARTITION_VALIDATION_NAME = "validation"
-PARTITION_FINETUNING_NAME = "finetuning"
-PARTITION_TEST_NAME = "test"
+DATA_TRAIN_NAME = "train"
+DATA_VALIDATION_NAME = "validation"
+DATA_FINETUNING_NAME = "finetuning"
+DATA_TEST_NAME = "test"
 
 # File name for the config file specifying how to create the dataset.
 DATASET_CONFIG_NAME = "dataset_config"
 
-class InvalidPartitionTypeError(Exception):
+class InvalidDatasetTypeError(Exception):
     "Error raised when an invalid dataset is provided to a function."""
     pass
 
-class PartitionType(Enum):
+class DatasetType(Enum):
     """Defines possible dataset types."""
     TRAIN = 0
     VALIDATION = 1
     FINETUNING = 2
     TEST = 3
 
-def get_partition_name(partition_type: PartitionType) -> str:
-    """Gets the name of the provided partition type.
+def get_dataset_file_path(data_dir: str, dataset_type: DatasetType) -> str:
+    """Gets the path to dataset coordinates for a given partition type.
 
     Args:
-        partition_type: The partition name to get the name of.
+        data_dir:
+        partition_type:
 
     Returns:
-        The name corresponding to the partition type.
 
     """
-    if partition_type == PartitionType.TRAIN:
-        return  PARTITION_TRAIN_NAME
+    if dataset_type == DatasetType.TRAIN:
+        data_file = DATA_TEST_NAME
         
-    elif partition_type == PartitionType.VALIDATION:
-        return PARTITION_VALIDATION_NAME
+    elif dataset_type == DatasetType.VALIDATION:
+        data_file = DATA_VALIDATION_NAME
 
-    elif partition_type == PartitionType.FINETUNING:
-        return PARTITION_FINETUNING_NAME
+    elif dataset_type == DatasetType.FINETUNING:
+        data_file = DATA_FINETUNING_NAME
 
-    elif partition_type == PartitionType.TEST:
-        return PARTITION_TEST_NAME
+    elif dataset_type == DatasetType.TEST:
+        data_file = DATA_TEST_NAME
 
     else:
         raise InvalidDatasetTypeError()
+
+    return  os.path.join(data_dir, data_file)
 
 def get_dataset_config_path(dataset_dir: str) -> str:
     """Gets the path to the dataset config file for a given dataset. 
@@ -60,7 +60,7 @@ def get_dataset_config_path(dataset_dir: str) -> str:
     Returns:
         The path to the tiles directory.
     """
-    return os.path.join(dataset_dir, DATASET_CONFIG_NAME)
+     return os.path.join(dataset_dir, DATASET_CONFIG_NAME)
 
 
 def read_tif_to_np(tif_path: str):

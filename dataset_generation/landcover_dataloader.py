@@ -3,102 +3,264 @@ import numpy as np
 import os
 import torch
 import torch.nn as nn
+import dataset_utils as utils
 
-from enum import Enum
+from collections import defaultdict 
 from typing import Any, Dict
 
-# Names to use for saving and reading data partitions.
-DATASET_TRAIN_NAME = "train"
-DATASET_VALIDATION_NAME = "validation"
-DATASET_FINETUNING_NAME = "finetuning"
-DATASET_TEST_NAME = "test"
+# Directories names containing the landcover tiles and coordinates.
+TILES_DIR = "tiles"
+COORDINATES_DIR = "coordinates"
 
+# File extensions for the x and y tile data.
+TILE_X_EXT = "_x.npy"
+TILE_Y_EXT = "_y.npy"
 
 class LandCoverDataset(torch.utils.data.Dataset):
     """Land Cover Dataset Containing patches. Loads a given tile into memory and slices it upon request."""
 
-    def __init__(self, dataset_config_path):
+    def __init__(self, dataset_dir: str, partition_type: utils.PartitionType):
         """
         Args:
-            features_path: Path to the features of a tile.
-            labels_path: Path to the labels of a tile.
-            patch_size: An Iterable[int, int] size of the image patch to be extracted.
-            n_samples: The number of samples to extract per tile.
-            patch_coordinates: A list of coordinates used to identify the top left hand corners of
-                the patches to extract from the tile. If None they are randomly generated.
-            exclude_coordinate: A set of coordinates to exclude from the dataset.
+            dataset_dir: The base directory of the dataset.
+        """
+         
+        self.dataset_config = utils.get_dataset_config_path(dataset_dir)
+        self.coords_dir = get_coordinates_dir(dataset_dir)
+        self.coords_path = get_coordinates_partition_path(self.coords_dir, partition_type)
+        self.tiles_dir = get_tiles_dir(dataset_dir)
+
+        # Cache all coordinates for the provided partition.
+        self.index = {}
+        tiles = set() 
+        with open(self.coords_path, "r") as f:
+            reader = csv.reader(f)
+            for i, row in enumerate(reader):
+                self.index[i] = row
+                tiles.add(row[4])
+
+        self.n_samples = len(self.index)
+               
+        # Calculate the number of classes in the dataset.
+        self.classes = set()
+        for tile in tiles: 
+            labels = np.load(get_tile_y_path(self.tiles_dir, tile))
+            self.classes.update(np.unique(labels))
+        
+        self.n_classes = len(self.classes)
+        
+        # Create variables to stored the currently cached tile and populate it.
+        self.tile = None
+        self.tile_x = None
+        self.tile_y = None
+        self.load_tile(tiles.pop())
+
+    def load_tile(self, tile: str):
+        """Loads the x and y data for a given tile and caches the data.
+        
+        Args:
+            tile: The name of the tile to retrieve. If the tile is already
+                stored in cache it is not read again.
 
         """
-        self.data = read_tif_to_np(features_path)
-        self.labels = read_tif_to_np(labels_path)
-        self.labels = self.labels - 1
-        
-        # Coalesces labels into 4 groups instead of 6.
-        # TODO(ameade): Consider allowing for transformation function arguments to modify data upon
-        # reading it in.
-        water_forest_land_impervious_remap = {1: 0, 2: 1, 3: 2, 4: 3, 5: 3, 6: 3}
-        apply_remap_values(self.labels, water_forest_land_impervious_remap)
+        if self.tile is None or self.tile != tile:
+            self.tile = tile
+            self.tile_x = np.load(get_tile_x_path(self.tiles_dir, tile))
+            self.tile_y = np.load(get_tile_y_path(self.tiles_dir, tile))
 
-        self.n_classes = len(np.unique(self.labels))
-        
-        self.patch_size = patch_size
-        self.n_samples = n_samples    
-        self.patch_coordinates = patch_coordinates
-        
-        if self.patch_coordinates is None:
-            # Generate patch coordinates from a random sample.
-            self.patch_coordinates = sample_patch_coordinates(self.data.shape, 
-                                                              self.patch_size,
-                                                              self.n_samples)
 
-        if exclude_coordinates is not None:
-            # Remove repeated coordinates in the exclusion set if they exist in self.patch_coordinates.
-            # TODO(ameade): Convert coordinates to sets for more efficient exclude operations.
-            for coord in exclude_coordinates:
-                try:
-                    self.patch_coordinates.remove(coord)
-                except:
-                    pass
-    
-                
-                
     def __len__(self):
         return self.n_samples
 
     def __getitem__(self, idx):
+        """Retrieves a single image patch and corresponding labels."""
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        height, width = self.patch_size
-        x, y = self.patch_coordinates[idx]
-        img = torch.from_numpy(self.data[:, y : y + height, x : x + width].astype(np.float32))
-        # Use LongTesnor cast for categorical.
-        label = torch.from_numpy(self.labels[0, y : y + height, x : x + width]).type(torch.LongTensor)
-        return img, label
+        x1, y1, x2, y2, tile = self.index[idx]
+        self.load_tile(tile)
+        features = torch.from_numpy(self.tile_x[:, y1:y1, x1:x2].astype(np.float32))
+        label = torch.from_numpy(self.tile_y[0, y1:y2, x1:x2]).type(torch.LongTensor)
+
+        return features, label
 
 
-class InvalidDatasetTypeError(Error):
-    "Error raised when an invalid dataset is provided to a function."""
-    pass
+def create_land_cover_dataset_from_config(dataset_dir: str):
+    """Generates datasets based on a config file.
+    
+    Args:
+        dataset_dir: The path to the dataset directory containing a config
+            from which to create a landcover dataset.
+    """
+
+    # Create tiles and coordinates directories.
+    tiles_dir = get_tiles_dir(dataset_dir) 
+    utils.mkdir_clean(tiles_dir)
+    coords_dir = get_coordinates_dir(dataset_dir)
+    utils.mkdir_clean(coords_dir)
+
+    tile_partitions = {}
+    dataset_config = utils.get_dataset_config_path(dataset_dir) 
+
+    patch_size = [0, 0]
+    
+    # A dict for mapping label values.
+    label_map = {}
+
+    with open(dataset_config + ".csv", "r") as f:
+        reader = csv.reader(f)
+    
+        # Dictionary storing tile names and the corresponding row entries from
+        # the csv.
+        for i, row in enumerate(reader):
+            if row[0] == "patch_size":
+                # Read patch size information from config.
+                patch_height = int(row[1])
+                patch_width = int(row[2])
+                patch_size = [patch_height, patch_width] 
+
+            elif row[0] == "label_map":
+                # Read information on how to map labels in the config.
+                old_label = int(row[1])
+                new_label = int(row[2])
+                label_map[old_label] = new_label
+
+            elif row[0] == "tile":
+                # Read the of tiles contained in each dataset partition.
+                partition_type = utils.PartitionType(int(row[1]))
+                n_samples = int(row[2])
+                tile = row[3]
+                feature_path = row[4]
+                label_path = row[5]
+
+                if tile not in tile_partitions:
+                    # Add a new data partition for the current tile.
+                    tile_partitions[tile] = [n_samples, 
+                                             feature_path,
+                                             label_path,
+                                             [[partition_type, n_samples]]]
+
+                else:
+                    # If the tile already exists increase the total number of
+                    # samples and track the new partition.
+                    tile_partitions[tile][0] += n_samples
+                    tile_partitions[tile][3].append([partition_type, n_samples])
+
+        for tile, entry in tile_partitions.items():
+            total_samples, feature_path, label_path, partitions = entry
+
+            # Read x and y features of tile.
+            tile_x = utils.read_tif_to_np(feature_path)
+            tile_y = utils.read_tif_to_np(label_path)
+            utils.apply_remap_values(tile_y, label_map)
+
+            # Save the tile x and y features to a local directory to avoid multiple
+            # reads from blobstore.
+            np.save(get_tile_x_path(tiles_dir, tile), tile_x)
+            np.save(get_tile_y_path(tiles_dir, tile), tile_y)
+
+            # Sample numerous patches from the provided tile and write them to
+            # the corresponding partition files. The sampled coordinates
+            # correspond to the upper left hand corner of the patch.
+            patch_coordinates = sample_image_patch(tile_x.shape, patch_size, total_samples)
+            
+            sample_idx = 0
+            for partition_entry in partitions:
+                partition_type, n_samples = partition_entry 
+                coords_path = get_coordinates_partition_path(coords_dir, partition_type)
+
+                with open(coords_path, "a") as f:
+                    writer = csv.writer(f)
+                    for i in range(sample_idx, sample_idx + n_samples):
+                        # Gets the upper left and bottom right coordinates
+                        # of the patch and write to file.
+                        x, y = patch_coordinates[i, :]
+                        x1 = x
+                        x2 = x + patch_size[1] - 1
+                        y1 = y
+                        y2 = y + patch_size[0] - 1
+                        writer.writerow([x1, y1, x2, y2, tile])
+                    
+                    sample_idx = sample_idx + n_samples
+
+def get_tile_x_path(tile_dir: str, tile: str) -> str:
+    """Gets the path to the x features of a given tile.
+
+    Args:
+        tile_dir: The directory containing the tile.
+        tile: The name of the tile.
+
+    Returns:
+        The path to the tiles x feature data.
+
+    """
+    return os.path.join(tile_dir, tile + TILE_X_EXT)
 
 
-class DatasetType(Enum):
-    """Defines possible dataset types."""
-    TRAIN = 1
-    VALIDATION = 2
-    FINETUNING = 3
-    TEST = 4
+def get_tile_y_path(tile_dir: str, tile: str) -> str:
+    """Gets the path to the x features of a given tile.
+
+    Args:
+        tile_dir: The directory containing the tile.
+        tile: The name of the tile.
+
+    Returns:
+        The path to the tiles x feature data.
+
+    """
+    return os.path.join(tile_dir, tile + TILE_Y_EXT)
 
 
-def get_landcover_dataloader(data_dir: str,
-                             dataset_type: DatasetType, 
+def get_tiles_dir(dataset_dir: str) -> str:
+    """Gets the directory of the tiles for a given landcover dataset.
+
+    Args:
+        dataset_dir: The lowest level dir for the dataset containing the config
+        file.
+    
+    Returns:
+        The path to the tiles directory.
+    """
+    return os.path.join(dataset_dir, TILES_DIR)
+
+
+def get_coordinates_dir(dataset_dir: str) -> str:
+    """Gets the directory of the coordinates for a given landcover dataset.
+
+    Args:
+        dataset_dir: The lowest level dir for the dataset containing the config
+        file.
+    
+    Returns:
+        The path to the tiles directory.
+    """
+    return os.path.join(dataset_dir, COORDINATES_DIR)
+
+
+def get_coordinates_partition_path(coordinates_dir: str, 
+                                   partition_type: utils.PartitionType) -> str:
+    """Gets the path to the coordinates for the provided partition file.
+    
+    Args:
+        coordinates_dir: A directory containing coordinates files.
+        partition_type: A partition type to retrieve the coordinates for.
+
+    Returns:
+        The path to a given set of partition coordinates.
+    """
+
+    return os.path.join(coordinates_dir, utils.get_partition_name(partition_type))
+
+
+def get_land_cover_dataloader(dataset_dir: str,
+                             partition_type: utils.PartitionType, 
                              dataloader_params: Dict[str, Any]) -> torch.utils.data.DataLoader:
     """Gets a pytorch DataLoader for landcover data.
 
     Args:
         data_dir: The path to the directory containing files with coordinates
             within tiles.
-        dataset_type: An enum specifying which data partition to recieve. I.E.
+        partition_type: An enum specifying which data partition to recieve. I.E.
             TRAIN, VALIDATION, TEST, etc...
         dataloader_params: A set of params to pass to the DataLoader.
 
@@ -106,75 +268,11 @@ def get_landcover_dataloader(data_dir: str,
         A pytorch DataLoader corresponding to the provided inputs.
     """
     
-    dataset_file = None
-    if dataset_type == DatasetType.TRAIN:
-        dataset_file = "%s.csv" $ DATASET_TRAIN_NAME
-        
-    elif dataset_type == DatasetType.VALIDATION
-        dataset_file = "%s.csv" % DATASET_VALIDATION_NAME
-
-    elif dataset_type == DatasetType.FINETUNING:
-        dataset_file = "%s.csv" % DATASET_FINETUNING_NAME
-
-    elif dataset_type == DatasetType.TEST:
-        dataset_file = "%s.csv" % DATASET_TEST_NAME
-
-    else:
-        raise InvalidDataSetTypeError()
-
-    data_path = os.path.join(data_dir, dataset_file)
-    dataset = LandCoverDataset(data_path) 
+    dataset = LandCoverDataset(dataset_dir, partition_type) 
     return torch.utils.data.DataLoader(dataset, **dataloader_params)
 
 
-def create_landcover_datasets(dataset_config_path: str, data_dir: str):
-    """Generates datasets based on a config file.
-
-    Args:
-        dataset_config_dir: The path to the directory containing configs
-            specifying which tiles to load.
-        data_dir: A director to write the data to.
-    """
-
-    tile_counts = {}
-    tile_map = {}
-    partition_map = {}
-    with open(dataset_config_path, "r") as f:
-        # TODO(ameade): Update config files to use protos instead of CSVs.
-        config_csv_reader = csv.reader(f, delimiter = ",")
-    
-        # Dictionary storing tile names and the corresponding row entries from
-        # the csv.
-        for row in config_csv_reader:
-            parition_type = row[0]
-            n_samples = int(row[1])
-            tile_name = row[2]
-            feature_path = row[3]
-            label_path = row[4]
-
-            if partition_type not in partition_map:
-                partition_map[partition_type] = []
-
-            if tile_name not in tile_map:
-                tile_map[tile_name] = []
-                tile_counts[tile_name] = 0
-
-            tile_map[tile_name].append([partition_type, n_samples,
-                feature_path, label_path])
-
-            tile_counts[tile_name] += n_samples
-
-    for tile, dataset_entries in tile_map.items():
-        total_samples = tile_counts[tile]
-
-        # copy label and feature tiles to dir
-    
-        # sample points from tile and append to partition_map
-
-        # append points to file
-
-
-def sample_image_patch_coordinates(data_size, patch_size, n_samples):
+def sample_image_patch(data_size, patch_size, n_samples):
     """Samples image coordinates to create patches from the image..
 
     Args:
@@ -192,3 +290,9 @@ def sample_image_patch_coordinates(data_size, patch_size, n_samples):
     ys = np.random.randint(0, data_size[1] - height, n_samples)
     return np.dstack((xs, ys)).reshape((n_samples, 2))
  
+
+if __name__ == "__main__":
+
+    dataset_dir = "/home/ashley/notebooks/ameade/ai_for_earth/data/dataset_1/"
+    create_land_cover_dataset_from_config(dataset_dir)
+    dataset = LandCoverDataset(dataset_dir, utils.PartitionType.TRAIN) 
