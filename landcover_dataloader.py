@@ -39,6 +39,9 @@ class LandCoverDataset(torch.utils.data.Dataset):
                 self.index[i] = row
                 tiles.add(row[4])
 
+        patch_width = self.index[0][2] - self.index[0][0]
+        patch_height = self.index[0][3] - self.index[0][1]
+        self.patch_size = (patch_height, patch_width)
         self.n_samples = len(self.index)
                
         # Calculate the number of classes in the dataset.
