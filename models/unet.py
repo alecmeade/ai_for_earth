@@ -3,12 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from enum import Enum
+from typing import Dict
 
 class UNet(nn.Module):
     """UNet specified in https://arxiv.org/abs/1505.04597, structure is modified from
     a combination of https://github.com/milesial/Pytorch-UNet 
     and https://github.com/usuyama/pytorch-unet.
-    
     
     Args:
         input_channels: Number of input channels to the network.
@@ -31,20 +31,28 @@ class UNet(nn.Module):
         # Stores the contraction and expansion layers in the UNet.
         self.down_layers = nn.ModuleList()
         self.up_layers = nn.ModuleList()
+        self.drop_layers = nn.ModuleList()
 
         prev_layer_channels = in_channels
         out_channels = start_channels
-        self.start_layer = DoubleConvBlock(prev_layer_channels, out_channels,
-                kernel_size = 3, padding = 1, has_relu = True, has_batch_norm = True)
+        
+    
+        self.drop_layers.append(DropoutFinetuning("start"))
+        self.start_layer = nn.Sequential(
+                DoubleConvBlock(prev_layer_channels, out_channels,
+                    kernel_size = 3, padding = 1, has_relu = True, has_batch_norm
+                    = True), self.drop_layers[-1])
     
         for i in range(depth):
             # Create contraction layers that increase the input channels by the provided
             # scale factor.
             prev_layer_channels = out_channels
             out_channels = prev_layer_channels * scale_factor
-            self.down_layers.append(DownLayer(prev_layer_channels,
+            self.drop_layers.append(DropoutFinetuning("down_%d" % i))
+            self.down_layers.append(nn.Sequential(DownLayer(prev_layer_channels,
                                               out_channels, 
-                                              scale_factor = scale_factor))
+                                              scale_factor = scale_factor),
+                                              self.drop_layers[-1]))
         
          
         for i in range(depth):
@@ -52,15 +60,20 @@ class UNet(nn.Module):
             # scale factor.
             prev_layer_channels = out_channels
             out_channels = int(prev_layer_channels / scale_factor)
+            self.drop_layers.append(DropoutFinetuning("up_%i" % i))
             self.up_layers.append(UpLayer(prev_layer_channels,
                                           out_channels, 
                                           scale_factor = scale_factor))
+            self.up_layers.append(self.drop_layers[-1])
 
         # Final layer in the network performing a 1x1 convolution to match the number of
         # output classes.
         prev_layer_channels = out_channels
         out_channels = int(prev_layer_channels / scale_factor)
-        self.conv1d = nn.Conv2d(prev_layer_channels, n_classes, kernel_size=1)
+        self.drop_layers.append(DropoutFinetuning("end"))
+        self.conv1d = nn.Sequential(
+                nn.Conv2d(prev_layer_channels, n_classes, kernel_size=1),
+                self.drop_layers[-1])
         
     def forward(self, x):
         """Forward pass for the UNet performing both contraction, contraction and skip connections."""
@@ -76,12 +89,26 @@ class UNet(nn.Module):
     
         # Pass input through the expansion layers and add in the corresponding contraction layer output.
         for i, up in enumerate(self.up_layers):
-            down_out = down_outs[-(i + 2)]
-            out = up(out, down_out)
+            if i % 2 == 0:
+                down_out = down_outs[-(int(i / 2) + 2)]
+                out = up(out, down_out)
+            else:
+                # Dropout up layer.
+                out = up(out)
 
         return self.conv1d(out)
 
+    def set_dropout_masks(self, masks: Dict[str, torch.Tensor]):
+        """Sets the dropout mask matrices to be applied to multiple layers of the UNet.
         
+        Args:
+            masks: A dictionary containing layer names and torch dropout masks
+            to apply to them.
+        """
+        for layer in self.drop_layers:
+            if layer.name in masks:
+                layer.set_mask(masks[layer.name])
+
 class DoubleConvBlock(nn.Module):
     """A module representing a two repeated convolution steps..
     
@@ -124,6 +151,38 @@ class DoubleConvBlock(nn.Module):
     def forward(self, x):
         """Forward pass for the double convolution layer."""
         return self.conv_layers(x)
+
+
+class DropoutFinetuning(nn.Module):
+    """Module for applying dropout to a given output within a network."""
+
+    def __init__(self, name: str):
+        super(DropoutFinetuning, self).__init__()
+        self.mask = None
+        self.activation_scaling = 0
+        self.name = name
+
+    def set_mask(self, mask: torch.Tensor):
+        if mask is not None:
+            self.mask = mask
+            nonzero = self.mask.nonzero().size(0)
+    
+            # Determins the scaling factor to apply to activations to account
+            # for dropout.
+            if nonzero != 0:
+                self.activation_scaling = 1.0 / (self.mask.nonzero().size(0) / self.mask.numel())
+            else:
+                self.activation_scaling = 0
+
+    def forward(self, x):
+        # Dropout mask is applied both during training and evaluation because
+        # we are using it for finetuning purposes.
+        if self.mask is not None:
+            return x * self.mask * self.activation_scaling
+        
+        else:
+            return x
+
 
 class DownLayer(nn.Module):
     """A module representing a single contraction step in a UNet.
@@ -202,7 +261,8 @@ class UpLayer(nn.Module):
                  has_batch_norm: bool = True,
                  scale_factor: int = 2,
                  stride: int = 2,
-                 up_conv_mode: UpConvMode = UpConvMode.CONV_TRANSPOSE):
+                 up_conv_mode: UpConvMode = UpConvMode.CONV_TRANSPOSE,
+                 name: str = "UpLayer"):
         super().__init__()
         up_layers = []
     

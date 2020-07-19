@@ -37,7 +37,13 @@ class LandCoverDataset(torch.utils.data.Dataset):
             reader = csv.reader(f)
             for i, row in enumerate(reader):
                 self.index[i] = row
-                tiles.add(row[4])
+                x1 = int(row[0])
+                y1 = int(row[1])
+                x2 = int(row[2])
+                y2 = int(row[3])
+                tile = row[4]
+                self.index[i] = [x1, y1, x2, y2, tile]
+                tiles.add(tile)
 
         patch_width = self.index[0][2] - self.index[0][0]
         patch_height = self.index[0][3] - self.index[0][1]
@@ -82,7 +88,7 @@ class LandCoverDataset(torch.utils.data.Dataset):
 
         x1, y1, x2, y2, tile = self.index[idx]
         self.load_tile(tile)
-        features = torch.from_numpy(self.tile_x[:, y1:y1, x1:x2].astype(np.float32))
+        features = torch.from_numpy(self.tile_x[:, y1:y2, x1:x2].astype(np.float32))
         label = torch.from_numpy(self.tile_y[0, y1:y2, x1:x2]).type(torch.LongTensor)
 
         return features, label
@@ -179,9 +185,9 @@ def create_land_cover_dataset_from_config(dataset_dir: str):
                         # of the patch and write to file.
                         x, y = patch_coordinates[i, :]
                         x1 = x
-                        x2 = x + patch_size[1] - 1
+                        x2 = x + patch_size[1]
                         y1 = y
-                        y2 = y + patch_size[0] - 1
+                        y2 = y + patch_size[0]
                         writer.writerow([x1, y1, x2, y2, tile])
                     
                     sample_idx = sample_idx + n_samples
