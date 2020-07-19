@@ -252,7 +252,8 @@ def get_coordinates_partition_path(coordinates_dir: str,
         The path to a given set of partition coordinates.
     """
 
-    return os.path.join(coordinates_dir, utils.get_partition_name(partition_type))
+    return os.path.join(coordinates_dir,
+            utils.get_partition_name(partition_type) + ".csv")
 
 
 def get_land_cover_dataloader(dataset_dir: str,
