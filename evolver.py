@@ -208,9 +208,10 @@ class MatrixEvolver(VectorEvolver):
 
         matrices = []
         idx = 0
-        for s in self._matrix_params:
+        for i, s in enumerate(self._matrix_params):
             m = np.zeros(s)
             m[:] = vec[idx : idx + s]
+            m = m.reshape(self._matrix_sizes[i])
             matrices.append(m)
             idx += s
 
