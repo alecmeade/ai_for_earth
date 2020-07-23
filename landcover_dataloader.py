@@ -94,7 +94,7 @@ class LandCoverDataset(torch.utils.data.Dataset):
         return features, label
 
 
-def create_land_cover_dataset_from_config(dataset_dir: str):
+def create_landcover_dataset_from_config(dataset_dir: str):
     """Generates datasets based on a config file.
     
     Args:
@@ -265,13 +265,13 @@ def get_coordinates_partition_path(coordinates_dir: str,
             utils.get_partition_name(partition_type) + ".csv")
 
 
-def get_land_cover_dataloader(dataset_dir: str,
+def get_landcover_dataloader(dataset_dir: str,
                              partition_type: utils.PartitionType, 
                              dataloader_params: Dict[str, Any]) -> torch.utils.data.DataLoader:
     """Gets a pytorch DataLoader for landcover data.
 
     Args:
-        data_dir: The path to the directory containing files with coordinates
+        dataset_dir: The path to the directory containing files with coordinates
             within tiles.
         partition_type: An enum specifying which data partition to recieve. I.E.
             TRAIN, VALIDATION, TEST, etc...
@@ -283,6 +283,34 @@ def get_land_cover_dataloader(dataset_dir: str,
     
     dataset = LandCoverDataset(dataset_dir, partition_type) 
     return torch.utils.data.DataLoader(dataset, **dataloader_params)
+
+def get_landcover_dataloaders(dataset_dir: str,
+                              partition_types: Iterable[utils.PartitionType],
+                              dataloader_params: Dict[str, Any],
+                              force_create_dataset: bool = False) -> Iterable[torch.utils.data.DataLoader:
+    """Gets a list pytorch DataLoaders for landcover data.
+
+    Args:
+        dataset_dir: The path to the directory containing files with coordinates
+            within tiles.
+        partition_types: An iterable of enums specifying which data partition to recieve. I.E.
+            TRAIN, VALIDATION, TEST, etc...
+        dataloader_params: A set of params to pass to the DataLoader.
+        force_create_dataset: Whether or not to populate the dataset directory
+            from the config in dataset_dir. If the dataset already exists it
+            will be deleted and remade when True.
+
+    Returns:
+        An Iterable DataLoader for a LandcoverDataset for each partition.
+    """
+    
+    assert partition_types
+
+    if force_create_dataset:
+        create_landcover_dataset_from_config(dataset_dir)
+
+    return [get_landcover_dataloader(dataset_dir, p, dataloader_params) for
+        p in partition_types]
 
 
 def sample_image_patch(data_size, patch_size, n_samples):
@@ -303,9 +331,3 @@ def sample_image_patch(data_size, patch_size, n_samples):
     ys = np.random.randint(0, data_size[1] - height, n_samples)
     return np.dstack((xs, ys)).reshape((n_samples, 2))
  
-
-if __name__ == "__main__":
-
-    dataset_dir = "/home/ashley/notebooks/ameade/ai_for_earth/data/dataset_1/"
-    create_land_cover_dataset_from_config(dataset_dir)
-    dataset = LandCoverDataset(dataset_dir, utils.PartitionType.TRAIN) 
