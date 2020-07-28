@@ -69,22 +69,29 @@ model = UNet(in_channels = params['in_channels'],
 
 model.to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(model.parameters(), 
-                            lr=params['learning_rate'],
-                            momentum=params['momentum'])
+optimizer = torch.optim.Adam(model.parameters(), 
+                             lr=params['learning_rate'],
+                             momentum=params['momentum'])
 
 
 # Determine metrics for evaluation.
-metrics = {"accuracy": Accuracy(), 
-           "loss": Loss(criterion),
-           "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
-          }
+train_metrics = {
+        "accuracy": Accuracy(), 
+        "loss": Loss(criterion),
+        "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
+        }
 
+validation_metrics = {
+        "accuracy": Accuracy(), 
+        "loss": Loss(criterion),
+        "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
+
+}
 
 # Create Trainer or Evaluators
 trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
-train_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
-validation_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
+train_evaluator = create_supervised_evaluator(model, metrics=train_metrics, device=device)
+validation_evaluator = create_supervised_evaluator(model, metrics=validation_metrics, device=device)
 
 trainer.logger = setup_logger("Trainer")
 train_evaluator.logger = setup_logger("Train Evaluator")
