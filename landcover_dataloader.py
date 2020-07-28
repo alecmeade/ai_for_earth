@@ -6,7 +6,7 @@ import torch.nn as nn
 import dataset_utils as utils
 
 from collections import defaultdict 
-from typing import Any, Dict
+from typing import Any, Dict, Iterable
 
 # Directories names containing the landcover tiles and coordinates.
 TILES_DIR = "tiles"
@@ -287,7 +287,7 @@ def get_landcover_dataloader(dataset_dir: str,
 def get_landcover_dataloaders(dataset_dir: str,
                               partition_types: Iterable[utils.PartitionType],
                               dataloader_params: Dict[str, Any],
-                              force_create_dataset: bool = False) -> Iterable[torch.utils.data.DataLoader:
+                              force_create_dataset: bool = False) -> Iterable[torch.utils.data.DataLoader]:
     """Gets a list pytorch DataLoaders for landcover data.
 
     Args:
@@ -304,8 +304,6 @@ def get_landcover_dataloaders(dataset_dir: str,
         An Iterable DataLoader for a LandcoverDataset for each partition.
     """
     
-    assert partition_types
-
     if force_create_dataset:
         create_landcover_dataset_from_config(dataset_dir)
 
