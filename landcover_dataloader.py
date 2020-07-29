@@ -156,6 +156,7 @@ def create_landcover_dataset_from_config(dataset_dir: str):
                     # samples and track the new partition.
                     tile_partitions[tile][0] += n_samples
                     tile_partitions[tile][3].append([partition_type, n_samples])
+
             elif row[0].startswith("#"):
                 # This is a comment row, skip
                 pass
