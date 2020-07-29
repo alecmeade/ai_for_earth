@@ -25,9 +25,9 @@ from ignite.utils import setup_logger
 
 # Define directories for data, logging and model saving.
 base_dir = os.getcwd()
-dataset_dir = os.path.join(base_dir, "data/landcover_small")
-log_dir = os.path.join(base_dir, "logs/landcover_small_training")
-model_dir = os.path.join(base_dir, "saved_models")
+dataset_name = "landcover_large"
+dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
+log_dir = os.path.join(base_dir, "logs/" + dataset_name)
 
 # Create DataLoaders for each partition of Landcover data.
 dataloader_params = {
@@ -41,7 +41,7 @@ partition_types = [PartitionType.TRAIN, PartitionType.VALIDATION,
 data_loaders = get_landcover_dataloaders(dataset_dir, 
                                          partition_types,
                                          dataloader_params,
-                                         force_create_dataset=True)
+                                         force_create_dataset=False)
 train_loader = data_loaders[0]
 validation_loader = data_loaders[1]
 finetuning_loader = data_loaders[2]
@@ -52,12 +52,11 @@ device = maybe_get_cuda_device()
 
 # Determine model and training params.
 params = {
-    'max_epochs': 100,
+    'max_epochs': 50,
     'n_classes': 4,
     'in_channels': 4,
     'depth': 4,
     'learning_rate': 0.01,
-    'momentum': 0.8,
     'log_steps': 1,
     'save_top_n_models': 3
 }
@@ -70,9 +69,7 @@ model = UNet(in_channels = params['in_channels'],
 model.to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), 
-                             lr=params['learning_rate'],
-                             momentum=params['momentum'])
-
+                             lr=params['learning_rate'])
 
 # Determine metrics for evaluation.
 train_metrics = {

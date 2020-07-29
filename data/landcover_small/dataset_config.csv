@@ -6,10 +6,10 @@ label_map,4,3
 label_map,5,3
 label_map,6,3
 #### Training tiles
-tile,0,5000,m_3907639_sw_18_1_20150815,/mnt/blobfuse/esri-naip/v002/md/2015/md_100cm_2015/39076/m_3907639_sw_18_1_20150815.tif,/mnt/blobfuse/resampled-lc/data/v1/2015/states/md/md_1m_2015/39076/m_3907639_sw_18_1_20150815_lc.tif
+tile,0,200,m_3907639_sw_18_1_20150815,/mnt/blobfuse/esri-naip/v002/md/2015/md_100cm_2015/39076/m_3907639_sw_18_1_20150815.tif,/mnt/blobfuse/resampled-lc/data/v1/2015/states/md/md_1m_2015/39076/m_3907639_sw_18_1_20150815_lc.tif
 #### Validation tiles
-tile,1,1000,m_3907639_sw_18_1_20150815,/mnt/blobfuse/esri-naip/v002/md/2015/md_100cm_2015/39076/m_3907639_sw_18_1_20150815.tif,/mnt/blobfuse/resampled-lc/data/v1/2015/states/md/md_1m_2015/39076/m_3907639_sw_18_1_20150815_lc.tif
+tile,1,200,m_3907639_sw_18_1_20150815,/mnt/blobfuse/esri-naip/v002/md/2015/md_100cm_2015/39076/m_3907639_sw_18_1_20150815.tif,/mnt/blobfuse/resampled-lc/data/v1/2015/states/md/md_1m_2015/39076/m_3907639_sw_18_1_20150815_lc.tif
 #### Finetuning tiles
-tile,2,500,m_3907639_ne_18_1_20150815,/mnt/blobfuse/esri-naip/v002/md/2015/md_100cm_2015/39076/m_3907639_ne_18_1_20150815.tif,/mnt/blobfuse/resampled-lc/data/v1/2015/states/md/md_1m_2015/39076/m_3907639_ne_18_1_20150815_lc.tif
+tile,2,200,m_3907639_ne_18_1_20150815,/mnt/blobfuse/esri-naip/v002/md/2015/md_100cm_2015/39076/m_3907639_ne_18_1_20150815.tif,/mnt/blobfuse/resampled-lc/data/v1/2015/states/md/md_1m_2015/39076/m_3907639_ne_18_1_20150815_lc.tif
 #### Test tiles
-tile,3,2500,m_3907639_ne_18_1_20150815,/mnt/blobfuse/esri-naip/v002/md/2015/md_100cm_2015/39076/m_3907639_ne_18_1_20150815.tif,/mnt/blobfuse/resampled-lc/data/v1/2015/states/md/md_1m_2015/39076/m_3907639_ne_18_1_20150815_lc.tif
+tile,3,200,m_3907639_ne_18_1_20150815,/mnt/blobfuse/esri-naip/v002/md/2015/md_100cm_2015/39076/m_3907639_ne_18_1_20150815.tif,/mnt/blobfuse/resampled-lc/data/v1/2015/states/md/md_1m_2015/39076/m_3907639_ne_18_1_20150815_lc.tif

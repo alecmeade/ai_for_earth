@@ -1,9 +1,11 @@
 import csv
+import dataset_utils as utils
 import numpy as np
+import matplotlib.pyplot as plt
 import os
+import seaborn as sns
 import torch
 import torch.nn as nn
-import dataset_utils as utils
 
 from collections import defaultdict 
 from typing import Any, Dict, Iterable
@@ -329,3 +331,17 @@ def sample_image_patch(data_size, patch_size, n_samples):
     ys = np.random.randint(0, data_size[1] - height, n_samples)
     return np.dstack((xs, ys)).reshape((n_samples, 2))
  
+def plot_prediction_overlay(tile: np.ndarray, prediction: np.ndarray):
+    """Generates a plot of a landcover tile and its corresponding model
+    predictions.
+    
+    Args:
+        tile: The landcover tile to plot.
+        prediction: The class label predictions of the landcover tile.
+
+    """
+    plt.figure()
+    plt.imshow(tile)
+    plt.show()
+
+
