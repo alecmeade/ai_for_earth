@@ -18,6 +18,9 @@ COORDINATES_DIR = "coordinates"
 TILE_X_EXT = "_x.npy"
 TILE_Y_EXT = "_y.npy"
 
+class MaxResampleCountExceeded(Error):
+    """An error thrown when an image patch cannot be sucessfully sampled."""
+
 class LandCoverDataset(torch.utils.data.Dataset):
     """Land Cover Dataset Containing patches. Loads a given tile into memory and slices it upon request."""
 
@@ -167,6 +170,10 @@ def create_landcover_dataset_from_config(dataset_dir: str):
             # Read x and y features of tile.
             tile_x = utils.read_tif_to_np(feature_path)
             tile_y = utils.read_tif_to_np(label_path)
+            unique_labels, counts = np.unique(tile_y, return_counts=True)
+            assert 0 not in (unique_labels), ("%s contains unlabeled patches."
+                % tile)
+            
             utils.apply_remap_values(tile_y, label_map)
 
             # Save the tile x and y features to a local directory to avoid multiple
@@ -177,8 +184,8 @@ def create_landcover_dataset_from_config(dataset_dir: str):
             # Sample numerous patches from the provided tile and write them to
             # the corresponding partition files. The sampled coordinates
             # correspond to the upper left hand corner of the patch.
-            patch_coordinates = sample_image_patch(tile_x.shape, patch_size, total_samples)
             
+            existing_samples = {}
             sample_idx = 0
             for partition_entry in partitions:
                 partition_type, n_samples = partition_entry 
@@ -187,15 +194,35 @@ def create_landcover_dataset_from_config(dataset_dir: str):
                 with open(coords_path, "a") as f:
                     writer = csv.writer(f)
                     for i in range(sample_idx, sample_idx + n_samples):
-                        # Gets the upper left and bottom right coordinates
-                        # of the patch and write to file.
-                        x, y = patch_coordinates[i, :]
-                        x1 = x
-                        x2 = x + patch_size[1]
-                        y1 = y
-                        y2 = y + patch_size[0]
-                        writer.writerow([x1, y1, x2, y2, tile])
-                    
+                        resample_count = 0
+                        resample_max = 100
+                        resample = False
+                        while resample_counts < resample_max and resample:
+                            x, y = sample_image_patch(tile_x.shape, patch_size, 1)[0, :]
+                            # Gets the upper left and bottom right coordinates
+                            # of the patch and write to file.
+                            x, y = patch_coordinates[i, :]
+                            x1 = x
+                            x2 = x + patch_size[1]
+                            y1 = y
+                            y2 = y + patch_size[0]
+                            
+                            # Some NAIP data is blank with all zero channels. We
+                            # resample patches to avoid this.
+                            patch = tile_x[:, y1:y2, x1:x2]
+                            num_zero_channels = np.sum(np.sum(img==0, axis=0) == 4)
+                            if (x, y) in existing_samples or (num_zero_channels / np.product(patch_size)) > 0.05:
+                                resample = True
+                                resample_count += 1
+
+                            else:
+                                existing_samples[(x, y)] = 0
+                                writer.writerow([x1, y1, x2, y2, tile])
+                                resample = False
+
+                        if resample_count == resample_max:
+                            raise MaxResampleCountExceeded(tile)
+
                     sample_idx = sample_idx + n_samples
 
 def get_tile_x_path(tile_dir: str, tile: str) -> str:
@@ -327,7 +354,6 @@ def sample_image_patch(data_size, patch_size, n_samples):
 
     """
     height, width = patch_size
-    channels = data_size[0]
     xs = np.random.randint(0, data_size[2] - width, n_samples)
     ys = np.random.randint(0, data_size[1] - height, n_samples)
     return np.dstack((xs, ys)).reshape((n_samples, 2))
