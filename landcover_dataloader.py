@@ -3,7 +3,6 @@ import dataset_utils as utils
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import seaborn as sns
 import torch
 import torch.nn as nn
 
@@ -18,7 +17,7 @@ COORDINATES_DIR = "coordinates"
 TILE_X_EXT = "_x.npy"
 TILE_Y_EXT = "_y.npy"
 
-class MaxResampleCountExceeded(Error):
+class MaxResampleCountExceeded(Exception):
     """An error thrown when an image patch cannot be sucessfully sampled."""
 
 class LandCoverDataset(torch.utils.data.Dataset):
@@ -196,12 +195,11 @@ def create_landcover_dataset_from_config(dataset_dir: str):
                     for i in range(sample_idx, sample_idx + n_samples):
                         resample_count = 0
                         resample_max = 100
-                        resample = False
-                        while resample_counts < resample_max and resample:
+                        resample = True
+                        while resample_count < resample_max and resample:
                             x, y = sample_image_patch(tile_x.shape, patch_size, 1)[0, :]
                             # Gets the upper left and bottom right coordinates
                             # of the patch and write to file.
-                            x, y = patch_coordinates[i, :]
                             x1 = x
                             x2 = x + patch_size[1]
                             y1 = y
@@ -210,8 +208,10 @@ def create_landcover_dataset_from_config(dataset_dir: str):
                             # Some NAIP data is blank with all zero channels. We
                             # resample patches to avoid this.
                             patch = tile_x[:, y1:y2, x1:x2]
-                            num_zero_channels = np.sum(np.sum(img==0, axis=0) == 4)
-                            if (x, y) in existing_samples or (num_zero_channels / np.product(patch_size)) > 0.05:
+                            num_zero_channels = np.sum(np.sum(patch==0, axis=0) == 4)
+
+                            if (x, y) in existing_samples or num_zero_channels > 0: 
+                                #or (num_zero_channels / np.product(patch_size)) > 0.05:
                                 resample = True
                                 resample_count += 1
 

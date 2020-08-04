@@ -31,7 +31,7 @@ log_dir = os.path.join(base_dir, "logs/" + dataset_name)
 
 # Create DataLoaders for each partition of Landcover data.
 dataloader_params = {
-    'batch_size': 16,
+    'batch_size': 8,
     'shuffle': True,
     'num_workers': 4,
     'pin_memory': True}
