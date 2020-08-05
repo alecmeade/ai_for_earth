@@ -109,6 +109,16 @@ class UNet(nn.Module):
             if layer.name in masks:
                 layer.set_mask(masks[layer.name])
 
+
+    def get_dropout_layers(self) -> Iterable[DropoutFinetuning]:
+        """Gets the dropout layers in the network.
+
+        Returns:
+            A list of dropout layers.
+        """
+        
+        return self.drop_layers
+
 class DoubleConvBlock(nn.Module):
     """A module representing a two repeated convolution steps..
     
@@ -161,6 +171,9 @@ class DropoutFinetuning(nn.Module):
         self.mask = None
         self.activation_scaling = 0
         self.name = name
+        # The size of x input provided to this layer. A single batch
+        # must be run through the network for this to be populated.
+        self.x_size = None
 
     def set_mask(self, mask: torch.Tensor):
         if mask is not None:
@@ -177,6 +190,7 @@ class DropoutFinetuning(nn.Module):
     def forward(self, x):
         # Dropout mask is applied both during training and evaluation because
         # we are using it for finetuning purposes.
+        self.x_size = x.size()
         if self.mask is not None:
             return x * self.mask * self.activation_scaling
         

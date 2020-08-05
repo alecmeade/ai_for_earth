@@ -27,7 +27,11 @@ from ignite.utils import setup_logger
 base_dir = os.getcwd()
 dataset_name = "landcover_large"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
-log_dir = os.path.join(base_dir, "logs/" + dataset_name)
+
+experiment_name = "backprop_finetuning"
+model_name = "best_model_30_validation_accuracy=0.9409.pt"
+model_path = os.path.join(base_dir, "logs/" + dataset_name + "/" + model_name)
+log_dir = os.path.join(base_dir, "logs/" + dataset_name + "_" + experiment_name)
 
 # Create DataLoaders for each partition of Landcover data.
 dataloader_params = {
@@ -42,8 +46,7 @@ data_loaders = get_landcover_dataloaders(dataset_dir,
                                          partition_types,
                                          dataloader_params,
                                          force_create_dataset=False)
-train_loader = data_loaders[0]
-validation_loader = data_loaders[1]
+
 finetuning_loader = data_loaders[2]
 test_loader = data_loaders[3]
 
@@ -52,7 +55,7 @@ device = maybe_get_cuda_device()
 
 # Determine model and training params.
 params = {
-    'max_epochs': 30,
+    'max_epochs': 10,
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
@@ -65,11 +68,13 @@ clear_cuda()
 model = UNet(in_channels = params['in_channels'],
              n_classes = params['n_classes'],
              depth = params['depth'])
+model.load_state_dict(torch.load(model_path))
 
 model.to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), 
                              lr=params['learning_rate'])
+
 
 # Determine metrics for evaluation.
 train_metrics = {
@@ -99,8 +104,8 @@ validation_evaluator.logger = setup_logger("Validation Evaluator")
 @trainer.on(Events.EPOCH_COMPLETED)
 def compute_metrics(engine):
     """Callback to compute metrics on the train and validation data."""
-    train_evaluator.run(train_loader)
-    validation_evaluator.run(validation_loader)
+    train_evaluator.run(finetuning_loader)
+    validation_evaluator.run(test_loader)
 
 def score_function(engine):
     """Function to determine the metric upon which to compare model."""
@@ -140,5 +145,5 @@ model_checkpoint = ModelCheckpoint(
 )
 
 validation_evaluator.add_event_handler(Events.COMPLETED, model_checkpoint, {"model": model})
-trainer.run(train_loader, max_epochs=params['max_epochs'])
+trainer.run(finetuning_loader, max_epochs=params['max_epochs'])
 tb_logger.close()
