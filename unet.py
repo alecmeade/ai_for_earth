@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from enum import Enum
-from typing import Dict
+from typing import Any, Dict, Iterable
 
 class UNet(nn.Module):
     """UNet specified in https://arxiv.org/abs/1505.04597, structure is modified from
@@ -110,7 +110,7 @@ class UNet(nn.Module):
                 layer.set_mask(masks[layer.name])
 
 
-    def get_dropout_layers(self) -> Iterable[DropoutFinetuning]:
+    def get_dropout_layers(self) -> Iterable[Any]:
         """Gets the dropout layers in the network.
 
         Returns:
@@ -169,7 +169,7 @@ class DropoutFinetuning(nn.Module):
     def __init__(self, name: str):
         super(DropoutFinetuning, self).__init__()
         self.mask = None
-        self.activation_scaling = 0
+        self.activation_scaling = 1.0
         self.name = name
         # The size of x input provided to this layer. A single batch
         # must be run through the network for this to be populated.
@@ -178,14 +178,14 @@ class DropoutFinetuning(nn.Module):
     def set_mask(self, mask: torch.Tensor):
         if mask is not None:
             self.mask = mask
-            nonzero = self.mask.nonzero().size(0)
-    
-            # Determins the scaling factor to apply to activations to account
-            # for dropout.
-            if nonzero != 0:
-                self.activation_scaling = 1.0 / (self.mask.nonzero().size(0) / self.mask.numel())
+            non_zero = self.mask.nonzero().size(0)
+            if non_zero == 0:
+                self.avitivation_sclaing = 1.0
+
             else:
-                self.activation_scaling = 0
+                # Determins the scaling factor to apply to activations to account
+                # for dropout.
+                self.activation_scaling = 1.0 / (non_zero / self.mask.numel())
 
     def forward(self, x):
         # Dropout mask is applied both during training and evaluation because

@@ -13,6 +13,13 @@ class MutationType(Enum):
     """A enum defining different mutation operations for a genetic algorithm."""
     FLIP_BIT = 1 
 
+class InitType(Enum):
+    """A enum defining how new children should be created."""
+    RANDOM = 1
+    ZEROS = 2
+    ONES = 3
+    BINOMIAL = 4
+
 
 class VectorEvolver():
     """A class for evolving a vector using a genetic algorithm."""
@@ -20,7 +27,9 @@ class VectorEvolver():
     def __init__(self, 
                  size: int, 
                  crossover_type: CrossoverType, 
-                 mutation_type: MutationType):
+                 mutation_type: MutationType,
+                 init_type: InitType,
+                 binomial_prob: float = 1.0):
         """Vector Evolver Ctor.
 
         Args:
@@ -29,10 +38,16 @@ class VectorEvolver():
                 offspring.
             mutation_type: The type of mutation operation used to produce new
                 offspring.
+            init_type: The way to init new children.
+            binomial_prob: The probability of producing a 1 in a randomly
+                generated binomial vector.
+
         """
         self._vec_size = size
         self.crossover_type = crossover_type
         self.mutation_type = mutation_type
+        self.init_type = init_type
+        self.binomial_prob = binomial_prob
 
         # Stores children of the current parents by their unique Ids.
         self._child_dict = {}
@@ -112,18 +127,27 @@ class VectorEvolver():
         self._generation_priorities = []
         self._generation += 1
 
-    def get_generation_stats(self) -> Dict[str, float]:
-        """Gets a dictionary of statistics summarizing the current
+    
+    def get_best_child(self):
+        """Gets the best performing child with the highest priority in the
+        heap.
+
+        Returns:
+            The heap entry for the best child in the generation.
+
+        """
+        return self._child_dict[heapq.nsmallest(1, self._child_heap)[0][1]]
+
+    def get_generation_priorities(self) -> Iterable[float]:
+        """An iterable containign the priorities for the current generation.
         generation.
         
         Returns:
-            A dictionary containing metric names and values.
-        
+            An iterable with priorities of the generation.
+            
         """
-        return {
-            'generation': self._generation,
-            'mean': round(np.mean(self._generation_priorities), 2),
-            'std': round(np.std(self._generation_priorities), 2)}
+        
+        return self._generation_priorities
 
     def init_child(self):
         """Intializes a random new child vector.
@@ -132,7 +156,19 @@ class VectorEvolver():
             An np.ndarray.
             
         """
-        return np.random.randint(low=0, high=1, size=self._vec_size)
+        if self.init_type == InitType.RANDOM:
+            return np.random.randint(low=0, high=1, size=self._vec_size)
+       
+        elif self.init_type == InitType.ZEROS:
+            return np.zeros(size=self._vec_size)
+        
+        elif self.init_type == InitType.ONES:
+            return np.ones(self._vec_size)
+        
+        else:
+            #self.init_type == InitType.BINOMIAL:
+            return np.random.binomial(size=self._vec_size, p=self.binomial_prob,
+                    n=1)
 
     def crossover(self, p1, p2):
         """Performs a crossover operation combining two parents to produce
@@ -179,7 +215,9 @@ class MatrixEvolver(VectorEvolver):
     def __init__(self, 
                  sizes: Iterable[Iterable[int]],
                  crossover_type: CrossoverType,
-                 mutation_type: MutationType):
+                 mutation_type: MutationType,
+                 init_type: InitType,
+                 binomial_prob: float = 0.8):
         """Matrix Evolver Ctor.
 
         Args:
@@ -188,12 +226,20 @@ class MatrixEvolver(VectorEvolver):
                 offspring.
             mutation_type: The type of mutation operation used to produce new
                 offspring.
+            init_type: The way to init new children.
+            binomial_prob: The probability of producing a 1 in a randomly
+                generated binomial vector.
+
         """
         
         self._matrix_sizes = sizes
         self._matrix_params = [np.product(s) for s in self._matrix_sizes]
         self._total_params = np.sum(self._matrix_params)
-        super().__init__(self._total_params, crossover_type, mutation_type)
+        super().__init__(self._total_params,
+                         crossover_type, 
+                         mutation_type,
+                         init_type)
+
 
     def vec_to_matrices(self, vec):
         """ Converts a vector to matrices whose size is defined by self.sizes.
@@ -229,12 +275,23 @@ class MatrixEvolver(VectorEvolver):
 
         vec = np.zeros(self._total_params)
         idx = 0
-
+        
         for i, s in enumerate(self._matrix_params):
-            vec[idx : idx + s] = matrices[i][:]
+            vec[idx : idx + s] = matrices[i].flatten()
             idx += s
 
         return vec
+ 
+    def get_best_child(self):
+        """Gets the best performing child with the highest priority in the
+        heap.
+
+        Returns:
+            The heap entry for the best child in the generation.
+
+        """
+        return self.vec_to_matrices(super().get_best_child()) 
+
 
     def spawn_child(self):
         """Creates a new set of child matrices by first spawning a vector and
