@@ -203,7 +203,7 @@ class VectorEvolver():
         """
         
         if self.mutation_type == MutationType.FLIP_BIT:
-            mutation_bits = np.random.rand(self._vec_size) < (1 / self._vec_size)
+            mutation_bits = np.random.rand(self._vec_size) < (1.0 / self._vec_size)
             p[mutation_bits] = 1 - p[mutation_bits]
 
         return p
