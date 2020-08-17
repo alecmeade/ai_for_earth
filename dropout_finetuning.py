@@ -27,10 +27,10 @@ from ignite.engine import Engine
 
 # Define directories for data, logging and model saving.
 base_dir = os.getcwd()
-dataset_name = "landcover_large"
+dataset_name = "landcover_large_v2"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
 
-experiment_name = "dropout_finetuning"
+experiment_name = "dropout_single_point_finetuning"
 model_name = "best_model_30_validation_accuracy=0.9409.pt"
 model_path = os.path.join(base_dir, "logs/" + dataset_name + "/" + model_name)
 log_dir = os.path.join(base_dir, "logs/" + dataset_name + "_" + experiment_name)
@@ -58,14 +58,14 @@ device = maybe_get_cuda_device()
 
 # Determine model and training params.
 params = {
-    'max_epochs': 10,
+    'max_epochs': 100,
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
     'learning_rate': 0.01,
     'log_steps': 1,
     'save_top_n_models': 4,
-    'num_children': 10
+    'num_children': 20
 }
 
 clear_cuda()    
@@ -115,11 +115,16 @@ for layer in drop_out_layers:
     optimizer = torch.optim.Adam(model.parameters(), 
                                  lr=params['learning_rate'])
 
-    evolver = MatrixEvolver(sizes, CrossoverType.UNIFORM,
-                            MutationType.FLIP_BIT, InitType.BINOMIAL, 0.9)
+    evolver = MatrixEvolver(sizes, 
+                            CrossoverType.UNIFORM,
+                            MutationType.FLIP_BIT, 
+                            InitType.BINOMIAL, 
+                            flip_bit_prob=0.9, 
+                            flip_bit_decay=0.9,
+                            binomial_prob=0.75)
 
     log_dir_test = log_dir + "_" + layer_name
-
+    
     def dropout_finetune_step(engine, batch):
         with torch.no_grad():
             batch_x, batch_y = batch
@@ -130,14 +135,14 @@ for layer in drop_out_layers:
                 child_mask = evolver.spawn_child()
                 model.set_dropout_masks({layer_name: torch.tensor(child_mask[0], dtype=torch.float32).to(device)})
                 outputs = model(batch_x)
-                current_loss = criterion(outputs, batch_y).item()
+                current_loss = criterion(outputs[:, :, 127:128,127:128], batch_y[:,127:128,127:128]).item()
                 # Priorities stored in a min heap by evolver and so
                 # we use the reciprocal.
                 evolver.add_child(child_mask, 1.0 / current_loss)
                 loss = min(loss, current_loss)
             
             best_child = evolver.get_best_child()
-            model.set_dropout_masks({layer_name: torch.tensor(best_child, dtype=torch.float32).to(device)})
+            model.set_dropout_masks({layer_name: torch.tensor(best_child[0], dtype=torch.float32).to(device)})
             return loss
 
 

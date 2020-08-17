@@ -22,13 +22,15 @@ from ignite.engine import Events, create_supervised_trainer, create_supervised_e
 from ignite.metrics import Accuracy, Loss, ConfusionMatrix, mIoU
 from ignite.handlers import ModelCheckpoint
 from ignite.utils import setup_logger
+from ignite.engine import Engine
+
 
 # Define directories for data, logging and model saving.
 base_dir = os.getcwd()
-dataset_name = "landcover_large"
+dataset_name = "landcover_large_v2"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
 
-experiment_name = "backprop_finetuning"
+experiment_name = "backprop_single_point_finetuning"
 model_name = "best_model_30_validation_accuracy=0.9409.pt"
 model_path = os.path.join(base_dir, "logs/" + dataset_name + "/" + model_name)
 log_dir = os.path.join(base_dir, "logs/" + dataset_name + "_" + experiment_name)
@@ -90,14 +92,26 @@ validation_metrics = {
 
 }
 
+def backprop_step(engine, batch):
+    batch_x, batch_y = batch
+    batch_x = batch_x.to(device)
+    batch_y = batch_y.to(device)
+    outputs = model(batch_x)
+    loss = criterion(outputs[:, :, 127:128,127:128], batch_y[:,127:128,127:128])
+    loss.backward()
+    optimizer.step()
+    return loss.item()
+  
 # Create Trainer or Evaluators
-trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
+trainer = Engine(backprop_step)
 train_evaluator = create_supervised_evaluator(model, metrics=train_metrics, device=device)
 validation_evaluator = create_supervised_evaluator(model, metrics=validation_metrics, device=device)
 
 trainer.logger = setup_logger("Trainer")
 train_evaluator.logger = setup_logger("Train Evaluator")
 validation_evaluator.logger = setup_logger("Validation Evaluator")
+
+
 
 # Tensorboard Logger setup below based on pytorch ignite example
 # https://github.com/pytorch/ignite/blob/master/examples/contrib/mnist/mnist_with_tensorboard_logger.py

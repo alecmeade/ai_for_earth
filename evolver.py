@@ -3,7 +3,7 @@ import numpy as np
 import uuid
 
 from enum import Enum
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Optional
 
 class CrossoverType(Enum):
     """A enum defining different crossover operations within a genetic algorthim."""
@@ -29,6 +29,8 @@ class VectorEvolver():
                  crossover_type: CrossoverType, 
                  mutation_type: MutationType,
                  init_type: InitType,
+                 flip_bit_prob: Optional[float] = None,
+                 flip_bit_decay: float = 1.0,
                  binomial_prob: float = 1.0):
         """Vector Evolver Ctor.
 
@@ -39,6 +41,11 @@ class VectorEvolver():
             mutation_type: The type of mutation operation used to produce new
                 offspring.
             init_type: The way to init new children.
+            flip_bit_prob: The probability of flipping a bit during mutation when
+                MutationType == FLIP_BIT. If None it default to 1/size the minimum allowable
+                decay.
+            flip_bit_decay: The scalar by which to decay the flip_bit_prob after each generation. The
+                probability cannot decay below 1/size.
             binomial_prob: The probability of producing a 1 in a randomly
                 generated binomial vector.
 
@@ -47,6 +54,13 @@ class VectorEvolver():
         self.crossover_type = crossover_type
         self.mutation_type = mutation_type
         self.init_type = init_type
+        self.flip_bit_prob = flip_bit_prob
+        
+        if self.flip_bit_prob is None or self.flip_bit_prob < (1.0 / self._vec_size):
+           self.flip_bit_prob = 1.0 / self._vec_size
+
+        self.flip_bit_decay = flip_bit_decay
+
         self.binomial_prob = binomial_prob
 
         # Stores children of the current parents by their unique Ids.
@@ -120,10 +134,15 @@ class VectorEvolver():
         for priority, pcid in parents_cid:
             self._parents.append(self._child_dict[pcid])
         
+        # Decay the flip bit probability each generation to increase stability overtime.
+        self.flip_bit_prob *= self.flip_bit_decay
+        self.flip_bit_prob = max(self.flip_bit_prob, 1.0 / self._vec_size)
+
         # Reset Evolver.
         self._child_dict = {}
         self._child_heap = []
         heapq.heapify(self._child_heap)
+        
         self._generation_priorities = []
         self._generation += 1
 
@@ -167,8 +186,9 @@ class VectorEvolver():
         
         else:
             #self.init_type == InitType.BINOMIAL:
-            return np.random.binomial(size=self._vec_size, p=self.binomial_prob,
-                    n=1)
+            return np.random.binomial(size=self._vec_size, 
+                                      p=self.binomial_prob,
+                                      n=1)
 
     def crossover(self, p1, p2):
         """Performs a crossover operation combining two parents to produce
@@ -203,7 +223,7 @@ class VectorEvolver():
         """
         
         if self.mutation_type == MutationType.FLIP_BIT:
-            mutation_bits = np.random.rand(self._vec_size) < (1.0 / self._vec_size)
+            mutation_bits = np.random.rand(self._vec_size) < (self.flip_bit_prob)
             p[mutation_bits] = 1 - p[mutation_bits]
 
         return p
@@ -217,6 +237,8 @@ class MatrixEvolver(VectorEvolver):
                  crossover_type: CrossoverType,
                  mutation_type: MutationType,
                  init_type: InitType,
+                 flip_bit_prob: Optional[float] = None,
+                 flip_bit_decay: float = 1.0,
                  binomial_prob: float = 0.8):
         """Matrix Evolver Ctor.
 
@@ -227,6 +249,11 @@ class MatrixEvolver(VectorEvolver):
             mutation_type: The type of mutation operation used to produce new
                 offspring.
             init_type: The way to init new children.
+            flip_bit_prob: The probability of flipping a bit during mutation when
+                MutationType == FLIP_BIT. If None it default to 1/size the minimum allowable
+                decay.
+            flip_bit_decay: The scalar by which to decay the flip_bit_prob after each generation. The
+                probability cannot decay below 1/size.
             binomial_prob: The probability of producing a 1 in a randomly
                 generated binomial vector.
 
@@ -238,7 +265,10 @@ class MatrixEvolver(VectorEvolver):
         super().__init__(self._total_params,
                          crossover_type, 
                          mutation_type,
-                         init_type)
+                         init_type,
+                         flip_bit_prob = flip_bit_prob,
+                         flip_bit_decay = flip_bit_decay,
+                         binomial_prob = binomial_prob)
 
 
     def vec_to_matrices(self, vec):
