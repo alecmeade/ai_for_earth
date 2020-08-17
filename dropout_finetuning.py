@@ -58,14 +58,14 @@ device = maybe_get_cuda_device()
 
 # Determine model and training params.
 params = {
-    'max_epochs': 100,
+    'max_epochs': 30,
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
     'learning_rate': 0.01,
     'log_steps': 1,
     'save_top_n_models': 4,
-    'num_children': 20
+    'num_children': 10
 }
 
 clear_cuda()    
@@ -119,9 +119,9 @@ for layer in drop_out_layers:
                             CrossoverType.UNIFORM,
                             MutationType.FLIP_BIT, 
                             InitType.BINOMIAL, 
-                            flip_bit_prob=0.9, 
-                            flip_bit_decay=0.9,
-                            binomial_prob=0.75)
+                            flip_bit_prob=0.1, 
+                            flip_bit_decay=0.99,
+                            binomial_prob=0.8)
 
     log_dir_test = log_dir + "_" + layer_name
     

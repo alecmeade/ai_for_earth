@@ -77,8 +77,9 @@ class VectorEvolver():
         # TODO(ameade): Consider parametrizing the number of parents and
         # allowing for off-spring to be created by multiple parents.
         self._num_parents = 2
-        self._parents = [self.init_child() for i in range(self._num_parents)]
-
+        self._parents = []
+        self._parents.append(self.init_child())
+        self._parents.append(self.init_child())
     
     # TODO(ameade) create a child class to allow typing enforcement.
     def add_child(self, child, priority: float) -> uuid.UUID:
