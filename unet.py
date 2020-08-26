@@ -176,8 +176,8 @@ class DropoutFinetuning(nn.Module):
         self.x_size = None
 
     def set_mask(self, mask: torch.Tensor):
-        if mask is not None:
-            self.mask = mask
+        self.mask = mask
+        if self.mask is not None:
             non_zero = self.mask.nonzero().size(0)
             if non_zero == 0:
                 self.avitivation_sclaing = 1.0
@@ -186,7 +186,7 @@ class DropoutFinetuning(nn.Module):
                 # Determins the scaling factor to apply to activations to account
                 # for dropout.
                 self.activation_scaling = 1.0 / (non_zero / self.mask.numel())
-
+            
     def forward(self, x):
         # Dropout mask is applied both during training and evaluation because
         # we are using it for finetuning purposes.

@@ -8,6 +8,7 @@ from typing import Dict, Iterable, Optional
 class CrossoverType(Enum):
     """A enum defining different crossover operations within a genetic algorthim."""
     UNIFORM = 1
+    SINGLE_POINT = 2
 
 class MutationType(Enum):
     """A enum defining different mutation operations for a genetic algorithm."""
@@ -156,7 +157,8 @@ class VectorEvolver():
             The heap entry for the best child in the generation.
 
         """
-        return self._child_dict[heapq.nsmallest(1, self._child_heap)[0][1]]
+        priority, cid = heapq.nlargest(1, self._child_heap)[0]
+        return priority, self._child_dict[cid]
 
     def get_generation_priorities(self) -> Iterable[float]:
         """An iterable containign the priorities for the current generation.
@@ -176,8 +178,9 @@ class VectorEvolver():
             An np.ndarray.
             
         """
+        
         if self.init_type == InitType.RANDOM:
-            return np.random.randint(low=0, high=1, size=self._vec_size)
+            return np.random.randint(low=0, high=2, size=self._vec_size)
        
         elif self.init_type == InitType.ZEROS:
             return np.zeros(size=self._vec_size)
@@ -186,7 +189,6 @@ class VectorEvolver():
             return np.ones(self._vec_size)
         
         else:
-            #self.init_type == InitType.BINOMIAL:
             return np.random.binomial(size=self._vec_size, 
                                       p=self.binomial_prob,
                                       n=1)
@@ -206,10 +208,19 @@ class VectorEvolver():
         """
 
         c = np.copy(p1)
-
         if self.crossover_type == CrossoverType.UNIFORM:
             crossover_bits = np.random.rand(self._vec_size) < 0.5 
             c[crossover_bits] = p2[crossover_bits]
+        
+        elif self.crossover_type == CrossoverType.SINGLE_POINT:
+            rand_index = np.random.randint(0, self._vec_size, 1)[0]
+            rand_direction = np.random.randint(0, 2, 1)[0]
+            
+            if rand_direction == 0:
+                c[rand_index:] = p2[rand_index:]
+
+            else:
+                c[:rand_index] = p2[:rand_index]
         
         return c
 
@@ -264,9 +275,9 @@ class MatrixEvolver(VectorEvolver):
         self._matrix_params = [np.product(s) for s in self._matrix_sizes]
         self._total_params = np.sum(self._matrix_params)
         super().__init__(self._total_params,
-                         crossover_type, 
-                         mutation_type,
-                         init_type,
+                         crossover_type = crossover_type, 
+                         mutation_type = mutation_type,
+                         init_type = init_type,
                          flip_bit_prob = flip_bit_prob,
                          flip_bit_decay = flip_bit_decay,
                          binomial_prob = binomial_prob)

@@ -12,7 +12,7 @@ import sys
 # tensorboard --logdir=logs --port=6006 --bind_all
 from torch.utils.tensorboard import SummaryWriter
 from functools import partial
-from evolver import CrossoverType, MutationType, InitType, MatrixEvolver
+from evolver import CrossoverType, MutationType, InitType, MatrixEvolver, VectorEvolver
 from unet import UNet
 from dataset_utils import PartitionType
 from cuda_utils import maybe_get_cuda_device, clear_cuda
@@ -27,7 +27,7 @@ from ignite.engine import Engine
 
 # Define directories for data, logging and model saving.
 base_dir = os.getcwd()
-dataset_name = "landcover_large_v2"
+dataset_name = "landcover_large"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
 
 experiment_name = "dropout_single_point_finetuning"
@@ -58,14 +58,14 @@ device = maybe_get_cuda_device()
 
 # Determine model and training params.
 params = {
-    'max_epochs': 30,
+    'max_epochs': 10,
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
     'learning_rate': 0.01,
     'log_steps': 1,
     'save_top_n_models': 4,
-    'num_children': 10
+    'num_children': 20
 }
 
 clear_cuda()    
@@ -114,16 +114,28 @@ for layer in drop_out_layers:
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), 
                                  lr=params['learning_rate'])
-
-    evolver = MatrixEvolver(sizes, 
+    
+    num_channels = size[0]
+    evolver = VectorEvolver(num_channels, 
                             CrossoverType.UNIFORM,
                             MutationType.FLIP_BIT, 
                             InitType.BINOMIAL, 
-                            flip_bit_prob=0.1, 
-                            flip_bit_decay=0.99,
+                            flip_bit_prob=None, 
+                            flip_bit_decay=1.0,
                             binomial_prob=0.8)
 
     log_dir_test = log_dir + "_" + layer_name
+    
+    def mask_from_vec(vec, matrix_size):
+        mask = np.ones(matrix_size)
+        for i in range(len(vec)):
+            if vec[i] == 0:
+                mask[i, :, :] = 0
+
+            elif vec[i] == 1:
+                mask[i, :, :] = 1
+
+        return mask
     
     def dropout_finetune_step(engine, batch):
         with torch.no_grad():
@@ -132,33 +144,34 @@ for layer in drop_out_layers:
             batch_y = batch_y.to(device)
             loss = sys.float_info.max
             for i in range(params['num_children']):
-                child_mask = evolver.spawn_child()
-                model.set_dropout_masks({layer_name: torch.tensor(child_mask[0], dtype=torch.float32).to(device)})
+                child_vec = evolver.spawn_child()
+                child_mask = mask_from_vec(child_vec, size)
+                model.set_dropout_masks({layer_name: torch.tensor(child_mask, dtype=torch.float32).to(device)})
                 outputs = model(batch_x)
                 current_loss = criterion(outputs[:, :, 127:128,127:128], batch_y[:,127:128,127:128]).item()
-                # Priorities stored in a min heap by evolver and so
-                # we use the reciprocal.
-                evolver.add_child(child_mask, 1.0 / current_loss)
                 loss = min(loss, current_loss)
-            
-            best_child = evolver.get_best_child()
-            model.set_dropout_masks({layer_name: torch.tensor(best_child[0], dtype=torch.float32).to(device)})
+                
+                if current_loss == 0.0:
+                    current_loss = sys.float_info.max
+                else:
+                    current_loss = 1.0 / current_loss
+                
+                print("Current", current_loss)
+                evolver.add_child(child_vec, current_loss)
+                
+            priority, best_child = evolver.get_best_child()
+            print("Best", priority)
+            best_mask = mask_from_vec(child_vec, size)
+            model.set_dropout_masks({layer_name: torch.tensor(best_mask, dtype=torch.float32).to(device)})
             return loss
-
 
     # Create Trainer or Evaluators
     trainer = Engine(dropout_finetune_step)
     train_evaluator = create_supervised_evaluator(model, metrics=train_metrics, device=device)
-
-
     validation_evaluator = create_supervised_evaluator(model, metrics=validation_metrics, device=device)
-
     trainer.logger = setup_logger("Trainer")
     train_evaluator.logger = setup_logger("Train Evaluator")
-
-
     validation_evaluator.logger = setup_logger("Validation Evaluator")
-
 
     @trainer.on(Events.ITERATION_COMPLETED(every=1))
     def report_evolver_stats(engine):

@@ -11,7 +11,7 @@ import torchvision
 # tensorboard --logdir=logs --port=6006 --bind_all
 from torch.utils.tensorboard import SummaryWriter
 from functools import partial
-from evolver import CrossoverType, MutationType, MatrixEvolver
+from evolver import CrossoverType, MutationType, VectorEvolver
 from unet import UNet
 from dataset_utils import PartitionType
 from cuda_utils import maybe_get_cuda_device, clear_cuda
@@ -27,7 +27,7 @@ from ignite.engine import Engine
 
 # Define directories for data, logging and model saving.
 base_dir = os.getcwd()
-dataset_name = "landcover_large_v2"
+dataset_name = "landcover_large"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
 
 experiment_name = "backprop_single_point_finetuning"
@@ -57,7 +57,7 @@ device = maybe_get_cuda_device()
 
 # Determine model and training params.
 params = {
-    'max_epochs': 10,
+    'max_epochs': 5,
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
@@ -93,6 +93,7 @@ validation_metrics = {
 }
 
 def backprop_step(engine, batch):
+    model.zero_grad()
     batch_x, batch_y = batch
     batch_x = batch_x.to(device)
     batch_y = batch_y.to(device)
