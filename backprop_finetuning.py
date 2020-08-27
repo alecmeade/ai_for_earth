@@ -31,7 +31,7 @@ dataset_name = "landcover_large"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
 
 experiment_name = "backprop_single_point_finetuning"
-model_name = "best_model_30_validation_accuracy=0.9409.pt"
+model_name = "best_model_9_validation_accuracy=0.8940.pt"
 model_path = os.path.join(base_dir, "logs/" + dataset_name + "/" + model_name)
 log_dir = os.path.join(base_dir, "logs/" + dataset_name + "_" + experiment_name)
 
@@ -57,11 +57,11 @@ device = maybe_get_cuda_device()
 
 # Determine model and training params.
 params = {
-    'max_epochs': 5,
+    'max_epochs': 10,
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
-    'learning_rate': 0.01,
+    'learning_rate': 0.001,
     'log_steps': 1,
     'save_top_n_models': 4
 }
@@ -73,23 +73,17 @@ model = UNet(in_channels = params['in_channels'],
 model.load_state_dict(torch.load(model_path))
 
 model.to(device)
-criterion = nn.CrossEntropyLoss()
+
+# Create Trainer or Evaluators
+criterion = nn.NLLLoss()
 optimizer = torch.optim.Adam(model.parameters(), 
                              lr=params['learning_rate'])
 
-
 # Determine metrics for evaluation.
-train_metrics = {
+metrics = {
         "accuracy": Accuracy(), 
         "loss": Loss(criterion),
         "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
-        }
-
-validation_metrics = {
-        "accuracy": Accuracy(), 
-        "loss": Loss(criterion),
-        "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
-
 }
 
 def backprop_step(engine, batch):
@@ -102,16 +96,16 @@ def backprop_step(engine, batch):
     loss.backward()
     optimizer.step()
     return loss.item()
-  
+ 
+
 # Create Trainer or Evaluators
 trainer = Engine(backprop_step)
-train_evaluator = create_supervised_evaluator(model, metrics=train_metrics, device=device)
-validation_evaluator = create_supervised_evaluator(model, metrics=validation_metrics, device=device)
+train_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
+validation_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
 
 trainer.logger = setup_logger("Trainer")
 train_evaluator.logger = setup_logger("Train Evaluator")
 validation_evaluator.logger = setup_logger("Validation Evaluator")
-
 
 
 # Tensorboard Logger setup below based on pytorch ignite example

@@ -317,7 +317,7 @@ def get_landcover_dataloader(dataset_dir: str,
 def get_landcover_dataloaders(dataset_dir: str,
                               partition_types: Iterable[utils.PartitionType],
                               dataloader_params: Dict[str, Any],
-                              force_create_dataset: bool = False) -> Iterable[torch.utils.data.DataLoader]:
+                              force_create_dataset: bool = True) -> Iterable[torch.utils.data.DataLoader]:
     """Gets a list pytorch DataLoaders for landcover data.
 
     Args:

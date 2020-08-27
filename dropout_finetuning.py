@@ -62,10 +62,10 @@ params = {
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
-    'learning_rate': 0.01,
+    'learning_rate': 0.001,
     'log_steps': 1,
     'save_top_n_models': 4,
-    'num_children': 20
+    'num_children': 30
 }
 
 clear_cuda()    
@@ -73,22 +73,16 @@ model = UNet(in_channels = params['in_channels'],
              n_classes = params['n_classes'],
              depth = params['depth'])
 model.load_state_dict(torch.load(model_path))
-criterion = nn.CrossEntropyLoss()
+# Create Trainer or Evaluators
+criterion = nn.NLLLoss()
 optimizer = torch.optim.Adam(model.parameters(), 
                              lr=params['learning_rate'])
 
 # Determine metrics for evaluation.
-train_metrics = {
+metrics = {
         "accuracy": Accuracy(), 
         "loss": Loss(criterion),
         "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
-        }
-
-validation_metrics = {
-        "accuracy": Accuracy(), 
-        "loss": Loss(criterion),
-        "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
-
 }
 
 for batch in train_loader:
@@ -111,7 +105,7 @@ for layer in drop_out_layers:
     model.load_state_dict(torch.load(model_path))
 
     model.to(device)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.NLLLoss()
     optimizer = torch.optim.Adam(model.parameters(), 
                                  lr=params['learning_rate'])
     
@@ -144,6 +138,7 @@ for layer in drop_out_layers:
             batch_y = batch_y.to(device)
             loss = sys.float_info.max
             for i in range(params['num_children']):
+                model.zero_grad()
                 child_vec = evolver.spawn_child()
                 child_mask = mask_from_vec(child_vec, size)
                 model.set_dropout_masks({layer_name: torch.tensor(child_mask, dtype=torch.float32).to(device)})
@@ -155,13 +150,11 @@ for layer in drop_out_layers:
                     current_loss = sys.float_info.max
                 else:
                     current_loss = 1.0 / current_loss
-                
-                print("Current", current_loss)
+
                 evolver.add_child(child_vec, current_loss)
                 
             priority, best_child = evolver.get_best_child()
-            print("Best", priority)
-            best_mask = mask_from_vec(child_vec, size)
+            best_mask = mask_from_vec(best_child, size)
             model.set_dropout_masks({layer_name: torch.tensor(best_mask, dtype=torch.float32).to(device)})
             return loss
 

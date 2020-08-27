@@ -33,7 +33,7 @@ log_dir = os.path.join(base_dir, "logs/" + dataset_name)
 dataloader_params = {
     'batch_size': 16,
     'shuffle': True,
-    'num_workers': 6,
+    'num_workers': 4,
     'pin_memory': True}
 
 partition_types = [PartitionType.TRAIN, PartitionType.VALIDATION, 
@@ -41,22 +41,20 @@ partition_types = [PartitionType.TRAIN, PartitionType.VALIDATION,
 data_loaders = get_landcover_dataloaders(dataset_dir, 
                                          partition_types,
                                          dataloader_params,
-                                         force_create_dataset=False)
+                                         force_create_dataset=True)
 train_loader = data_loaders[0]
 validation_loader = data_loaders[1]
-finetuning_loader = data_loaders[2]
-test_loader = data_loaders[3]
 
 # Get GPU device if available.
 device = maybe_get_cuda_device()
 
 # Determine model and training params.
 params = {
-    'max_epochs': 30,
+    'max_epochs': 10,
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
-    'learning_rate': 0.01,
+    'learning_rate': 0.001,
     'log_steps': 1,
     'save_top_n_models': 4
 }
@@ -67,28 +65,21 @@ model = UNet(in_channels = params['in_channels'],
              depth = params['depth'])
 
 model.to(device)
-criterion = nn.CrossEntropyLoss()
+criterion = nn.NLLLoss()
 optimizer = torch.optim.Adam(model.parameters(), 
                              lr=params['learning_rate'])
 
 # Determine metrics for evaluation.
-train_metrics = {
+metrics = {
         "accuracy": Accuracy(), 
         "loss": Loss(criterion),
         "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
-        }
-
-validation_metrics = {
-        "accuracy": Accuracy(), 
-        "loss": Loss(criterion),
-        "mean_iou": mIoU(ConfusionMatrix(num_classes = params['n_classes'])),
-
 }
 
 # Create Trainer or Evaluators
 trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
-train_evaluator = create_supervised_evaluator(model, metrics=train_metrics, device=device)
-validation_evaluator = create_supervised_evaluator(model, metrics=validation_metrics, device=device)
+train_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
+validation_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
 
 trainer.logger = setup_logger("Trainer")
 train_evaluator.logger = setup_logger("Train Evaluator")
@@ -129,6 +120,18 @@ for tag, evaluator in [("training", train_evaluator), ("validation", validation_
 tb_logger.attach_opt_params_handler(trainer, 
                                     event_name=Events.ITERATION_COMPLETED(every=params['log_steps']), 
                                     optimizer=optimizer)
+
+tb_logger.attach(trainer, log_handler=WeightsScalarHandler(model), 
+                 event_name=Events.ITERATION_COMPLETED(every=params['log_steps']))
+
+tb_logger.attach(trainer, log_handler=WeightsHistHandler(model), 
+                 event_name=Events.EPOCH_COMPLETED(every=params['log_steps']))
+
+tb_logger.attach(trainer, log_handler=GradsScalarHandler(model), 
+                 event_name=Events.ITERATION_COMPLETED(every=params['log_steps']))
+
+tb_logger.attach(trainer, log_handler=GradsHistHandler(model), 
+                 event_name=Events.EPOCH_COMPLETED(every=params['log_steps']))
 
 model_checkpoint = ModelCheckpoint(
     log_dir,

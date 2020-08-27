@@ -70,10 +70,7 @@ class UNet(nn.Module):
         # output classes.
         prev_layer_channels = out_channels
         out_channels = int(prev_layer_channels / scale_factor)
-        self.drop_layers.append(DropoutFinetuning("end"))
-        self.conv1d = nn.Sequential(
-                nn.Conv2d(prev_layer_channels, n_classes, kernel_size=1),
-                self.drop_layers[-1])
+        self.conv1d = nn.Conv2d(prev_layer_channels, n_classes, kernel_size=1)
         
     def forward(self, x):
         """Forward pass for the UNet performing both contraction, contraction and skip connections."""
@@ -95,8 +92,9 @@ class UNet(nn.Module):
             else:
                 # Dropout up layer.
                 out = up(out)
-
-        return self.conv1d(out)
+        
+        # Calculates softmax since pytorch expects 0 - 1 bounded output.
+        return F.log_softmax(self.conv1d(out), dim=1)
 
     def set_dropout_masks(self, masks: Dict[str, torch.Tensor]):
         """Sets the dropout mask matrices to be applied to multiple layers of the UNet.
