@@ -31,7 +31,7 @@ dataset_name = "landcover_large"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
 
 experiment_name = "dropout_single_point_finetuning"
-model_name = "best_model_30_validation_accuracy=0.9409.pt"
+model_name = "best_model_9_validation_accuracy=0.8940.pt"
 model_path = os.path.join(base_dir, "logs/" + dataset_name + "/" + model_name)
 log_dir = os.path.join(base_dir, "logs/" + dataset_name + "_" + experiment_name)
 
@@ -160,8 +160,8 @@ for layer in drop_out_layers:
 
     # Create Trainer or Evaluators
     trainer = Engine(dropout_finetune_step)
-    train_evaluator = create_supervised_evaluator(model, metrics=train_metrics, device=device)
-    validation_evaluator = create_supervised_evaluator(model, metrics=validation_metrics, device=device)
+    train_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
+    validation_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
     trainer.logger = setup_logger("Trainer")
     train_evaluator.logger = setup_logger("Train Evaluator")
     validation_evaluator.logger = setup_logger("Validation Evaluator")
