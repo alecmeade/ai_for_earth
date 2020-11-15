@@ -30,7 +30,7 @@ base_dir = os.getcwd()
 dataset_name = "landcover_large"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
 
-experiment_name = "backprop_single_point_finetuning"
+experiment_name = "backprop_single_point_finetuning_frozen_batchnorm_ReduceLROnPlateau_0001"
 model_name = "best_model_9_validation_accuracy=0.8940.pt"
 model_path = os.path.join(base_dir, "logs/" + dataset_name + "/" + model_name)
 log_dir = os.path.join(base_dir, "logs/" + dataset_name + "_" + experiment_name)
@@ -61,7 +61,7 @@ params = {
     'n_classes': 4,
     'in_channels': 4,
     'depth': 5,
-    'learning_rate': 0.001,
+    'learning_rate': 0.0001,
     'log_steps': 1,
     'save_top_n_models': 4
 }
@@ -79,6 +79,9 @@ criterion = nn.NLLLoss()
 optimizer = torch.optim.Adam(model.parameters(), 
                              lr=params['learning_rate'])
 
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+
+
 # Determine metrics for evaluation.
 metrics = {
         "accuracy": Accuracy(), 
@@ -87,6 +90,7 @@ metrics = {
 }
 
 def backprop_step(engine, batch):
+    model.eval()
     model.zero_grad()
     batch_x, batch_y = batch
     batch_x = batch_x.to(device)
@@ -115,6 +119,7 @@ def compute_metrics(engine):
     """Callback to compute metrics on the train and validation data."""
     train_evaluator.run(finetuning_loader)
     validation_evaluator.run(test_loader)
+    scheduler.step(validation_evaluator.state.metrics['loss'])
 
 def score_function(engine):
     """Function to determine the metric upon which to compare model."""
@@ -143,6 +148,18 @@ for tag, evaluator in [("training", train_evaluator), ("validation", validation_
 tb_logger.attach_opt_params_handler(trainer, 
                                     event_name=Events.ITERATION_COMPLETED(every=params['log_steps']), 
                                     optimizer=optimizer)
+
+tb_logger.attach(trainer, log_handler=WeightsScalarHandler(model), 
+                 event_name=Events.ITERATION_COMPLETED(every=params['log_steps']))
+
+tb_logger.attach(trainer, log_handler=WeightsHistHandler(model), 
+                 event_name=Events.EPOCH_COMPLETED(every=params['log_steps']))
+
+tb_logger.attach(trainer, log_handler=GradsScalarHandler(model), 
+                 event_name=Events.ITERATION_COMPLETED(every=params['log_steps']))
+
+tb_logger.attach(trainer, log_handler=GradsHistHandler(model), 
+                 event_name=Events.EPOCH_COMPLETED(every=params['log_steps']))
 
 model_checkpoint = ModelCheckpoint(
     log_dir,

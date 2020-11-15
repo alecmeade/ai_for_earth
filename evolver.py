@@ -79,8 +79,7 @@ class VectorEvolver():
         # allowing for off-spring to be created by multiple parents.
         self._num_parents = 2
         self._parents = []
-        self._parents.append(self.init_child())
-        self._parents.append(self.init_child())
+
     
     # TODO(ameade) create a child class to allow typing enforcement.
     def add_child(self, child, priority: float) -> uuid.UUID:
@@ -122,8 +121,12 @@ class VectorEvolver():
             A new child object that has been evolved from its parents.
             
         """
-        return self.mutate(self.crossover(self._parents[0], 
-                                          self._parents[1]))   
+        if len(self._parents) == 0:
+            return self.init_child()
+        
+        else:
+            return self.mutate(self.crossover(self._parents[0], 
+                                              self._parents[1]))   
 
     def update_parents(self):
         """Updates `self._parents by selecting the parents from the current
@@ -180,7 +183,11 @@ class VectorEvolver():
         """
         
         if self.init_type == InitType.RANDOM:
-            return np.random.randint(low=0, high=2, size=self._vec_size)
+            num_zeros = np.random.randint(low=0, high=self._vec_size + 1, size=1)
+            idxs = np.random.choice(np.arange(self._vec_size), num_zeros, replace = False)
+            rand_vec = np.zeros(self._vec_size)
+            rand_vec[idxs] = 1
+            return rand_vec
        
         elif self.init_type == InitType.ZEROS:
             return np.zeros(size=self._vec_size)

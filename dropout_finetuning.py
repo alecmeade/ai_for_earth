@@ -16,7 +16,7 @@ from evolver import CrossoverType, MutationType, InitType, MatrixEvolver, Vector
 from unet import UNet
 from dataset_utils import PartitionType
 from cuda_utils import maybe_get_cuda_device, clear_cuda
-from landcover_dataloader import get_landcover_dataloaders
+from landcover_dataloader import get_landcover_dataloaders, get_landcover_dataloader
 
 from ignite.contrib.handlers.tensorboard_logger import *
 from ignite.engine import Events, create_supervised_trainer, create_supervised_evaluator
@@ -30,14 +30,14 @@ base_dir = os.getcwd()
 dataset_name = "landcover_large"
 dataset_dir = os.path.join(base_dir, "data/" + dataset_name)
 
-experiment_name = "dropout_single_point_finetuning"
+experiment_name = "dropout_single_point_finetuning_100_children"
 model_name = "best_model_9_validation_accuracy=0.8940.pt"
 model_path = os.path.join(base_dir, "logs/" + dataset_name + "/" + model_name)
 log_dir = os.path.join(base_dir, "logs/" + dataset_name + "_" + experiment_name)
 
 # Create DataLoaders for each partition of Landcover data.
 dataloader_params = {
-    'batch_size': 16,
+    'batch_size': 8,
     'shuffle': True,
     'num_workers': 6,
     'pin_memory': True}
@@ -49,9 +49,13 @@ data_loaders = get_landcover_dataloaders(dataset_dir,
                                          dataloader_params,
                                          force_create_dataset=False)
 
+
 train_loader = data_loaders[0]
 finetuning_loader = data_loaders[2]
-test_loader = data_loaders[3]
+
+dataloader_params['shuffle'] = False
+test_loader = get_landcover_dataloader(dataset_dir, PartitionType.TEST, dataloader_params)
+
 
 # Get GPU device if available.
 device = maybe_get_cuda_device()
@@ -65,7 +69,7 @@ params = {
     'learning_rate': 0.001,
     'log_steps': 1,
     'save_top_n_models': 4,
-    'num_children': 30
+    'num_children': 100
 }
 
 clear_cuda()    
@@ -113,10 +117,9 @@ for layer in drop_out_layers:
     evolver = VectorEvolver(num_channels, 
                             CrossoverType.UNIFORM,
                             MutationType.FLIP_BIT, 
-                            InitType.BINOMIAL, 
-                            flip_bit_prob=None, 
-                            flip_bit_decay=1.0,
-                            binomial_prob=0.8)
+                            InitType.RANDOM, 
+                            flip_bit_prob=0.25, 
+                            flip_bit_decay=0.5)
 
     log_dir_test = log_dir + "_" + layer_name
     
@@ -132,6 +135,7 @@ for layer in drop_out_layers:
         return mask
     
     def dropout_finetune_step(engine, batch):
+        model.eval()
         with torch.no_grad():
             batch_x, batch_y = batch
             batch_x = batch_x.to(device)
@@ -155,6 +159,7 @@ for layer in drop_out_layers:
                 
             priority, best_child = evolver.get_best_child()
             best_mask = mask_from_vec(best_child, size)
+            
             model.set_dropout_masks({layer_name: torch.tensor(best_mask, dtype=torch.float32).to(device)})
             return loss
 
@@ -178,6 +183,34 @@ for layer in drop_out_layers:
         tb_logger.writer.add_scalar("training/evolver_std",
                                     np.std(priorities), engine.state.iteration)
         evolver.update_parents()
+       
+    @trainer.on(Events.EPOCH_COMPLETED)
+    
+    
+    def visualize_validation_predictions(engine):
+        for i, batch in enumerate(test_loader):
+            batch_x, batch_y = batch
+            batch_x = batch_x.to(device)
+            batch_y = batch_y.to(device)
+            outputs = model(batch_x)
+            
+            num_images = batch_x.shape[0]
+            batch_y_detach = batch_y.detach().cpu().numpy()
+            batch_x_detach = batch_x.detach().cpu().numpy()
+            outputs_detach = outputs.detach().cpu().numpy()
+            for j in range(num_images):
+                f, ax = plt.subplots(1, 3, figsize=(10, 4))
+                ax[0].imshow(np.moveaxis(batch_x_detach[j, :, :, :], [0], [2]) / 255.0)
+                ax[1].imshow((np.array(batch_y_detach[j, :, :])))
+                ax[2].imshow(np.argmax(np.moveaxis(np.array(outputs_detach[j, :, :, :]), [0],[ 2]), axis=2))
+                ax[0].set_title("X")
+                ax[1].set_title("Y")
+                ax[2].set_title("Predict")
+                f.suptitle("Layer: " + layer_name + " Itteration: " + str(engine.state.iteration) + " Image: " + str(j))    
+                plt.show()
+            if i > 5:
+                break
+            break
         
     # Tensorboard Logger setup below based on pytorch ignite example
     # https://github.com/pytorch/ignite/blob/master/examples/contrib/mnist/mnist_with_tensorboard_logger.py
